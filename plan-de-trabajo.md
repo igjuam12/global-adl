@@ -1,10 +1,8 @@
 # Proyecto final RADIUS — Plan de trabajo del grupo
 
-Administración de Servicios en Linux · UTN · Presentación: **jueves 26 de noviembre**
+Administración de Servicios en Linux · UTN FRM · Versión unificada del 19 de noviembre · Presentación: jueves 26 de noviembre
 
-Este documento es el punto de partida común. Junta la consigna de la cátedra, los acuerdos del grupo y el diseño de la red. Cada uno lo usa para arrancar con su parte. Si alguien cambia un dato común, avisa al grupo y lo actualiza acá.
-
----
+> Este es el **único documento de trabajo** del grupo. Junta la consigna, los acuerdos de la reunión, la topología y la división del trabajo. Reemplaza al Word del 18-nov y a la versión anterior de este archivo. Si alguien cambia un dato común, avisa al grupo y lo actualiza acá.
 
 ## 1. Qué pide el proyecto
 
@@ -35,8 +33,6 @@ CPU, memoria, logs y accounting son el **mínimo** del tablero. Qué más mostra
 | Mié 25-nov | Consulta y avance: último bloque antes de presentar |
 | Jue 26-nov | Presentación con los docentes |
 
-Las consultas sirven para mostrar ideas antes de cerrarlas. Una idea discutida temprano cuesta mucho menos que una corregida el 26.
-
 ### Cómo evalúan
 
 Evalúan **el proceso, no el resultado**. Un tablero perfecto que nadie sabe explicar vale menos que uno a medias con decisiones bien pensadas. No se entrega nada escrito: lo contamos en la presentación, con todo funcionando. Las preguntas pueden ir a **cualquier integrante, sobre cualquier parte**.
@@ -52,8 +48,6 @@ Evalúan **el proceso, no el resultado**. Un tablero perfecto que nadie sabe exp
 ### Uso de IA
 
 Se puede usar todo lo que queramos. La condición: **tenemos que poder explicar qué hace cada parte de cualquier configuración y por qué está ahí**. Si una configuración la generó una IA, nos van a preguntar línea por línea. Además suma contar cómo la usamos: qué le preguntamos, qué respondió mal y cómo nos dimos cuenta.
-
----
 
 ## 2. Conceptos básicos
 
@@ -73,17 +67,17 @@ A estas tres preguntas se las llama **AAA**: autenticación, autorización y acc
 | --- | --- |
 | RADIUS | Un protocolo (un "idioma" entre máquinas) para autenticar usuarios y registrar su uso. FreeRADIUS es el programa gratuito que lo implementa. |
 | Cliente RADIUS | Quien le hace preguntas al RADIUS. En nuestro caso es **el router**, no el abonado. El abonado nunca habla con el RADIUS. |
-| Secreto compartido | Una contraseña que conocen el router y el RADIUS. El RADIUS solo le contesta a routers que la conocen. Si no coincide, ignora el pedido sin avisar. |
+| Secreto compartido | Una contraseña que conocen el router y el RADIUS. Sirve para que el RADIUS solo trate con routers conocidos. |
 | Accounting | La parte de "¿qué hiciste?": un registro de cada conexión con usuario, hora de inicio, hora de fin y datos usados. |
-| PPPoE | La forma en que el abonado se loguea en el router con usuario y contraseña. Recién después de loguearse, el router le da una IP. |
-| VLAN | Una forma de separar redes que viajan por el mismo cable, poniéndole una "etiqueta" (un número) a cada paquete. Usamos la VLAN 100 para el tráfico de los abonados. Las dos puntas tienen que usar el mismo número. |
+| PPPoE | La forma en que el abonado se loguea en el router con usuario y contraseña. Recién después de loguearse, el router le da una IP. Ya lo vimos en la P6 de Redes. |
+| VLAN | Una forma de separar redes que viajan por el mismo cable, poniéndole una "etiqueta" (un número) a cada paquete. Usamos la VLAN 100 para los abonados. Las dos puntas tienen que usar el mismo número. |
 | MikroTik (CHR) | El router. CHR es la versión de MikroTik que corre en una máquina virtual. |
 | PostgreSQL | La base de datos donde FreeRADIUS guarda los usuarios, los planes y el accounting. |
 | Docker / contenedor | Una forma de correr un programa empaquetado con todo lo que necesita, sin instalarlo a mano. Es parecido a una VM, pero más liviano. |
 | Grafana | Un programa para armar tableros con gráficos a partir de datos de distintos lugares. |
 | Métrica | Un número que se mide cada cierto tiempo. Ejemplo: "CPU al 35%". |
 | Log | Un mensaje de texto sobre algo que pasó. Ejemplo: "10:03 el usuario juan se conectó". |
-| Observabilidad | Poder ver desde afuera cómo funciona un sistema, usando métricas y logs. |
+| Observabilidad | Poder ver desde afuera cómo funciona un sistema, usando métricas y logs. Ya lo vimos en la P6 de Servidores con Prometheus. |
 
 ### Qué mensajes se mandan el router y el RADIUS
 
@@ -93,7 +87,7 @@ A estas tres preguntas se las llama **AAA**: autenticación, autorización y acc
 | Access-Accept | RADIUS → Router | "Sí, y este es su plan" |
 | Access-Reject | RADIUS → Router | "No, rechazalo" |
 | Accounting Start | Router → RADIUS | "Este usuario se conectó" |
-| Accounting Interim-Update | Router → RADIUS | "Lleva este tiempo y estos datos usados". Se manda cada minuto. |
+| Accounting Interim-Update | Router → RADIUS | "Lleva este tiempo y estos datos usados". Se manda cada minuto, si lo configuramos así. |
 | Accounting Stop | Router → RADIUS | "Se desconectó; este es el total" |
 | Disconnect-Request | RADIUS → Router | "Cortá a este usuario ahora" (sirve para cortar a un moroso en el momento) |
 
@@ -102,8 +96,6 @@ Ejemplo de cómo se ve el accounting:
 | Usuario | Inicio | Fin | Descargó |
 | --- | --- | --- | --- |
 | juan | 10:00 | 10:45 | 300 MB |
-
----
 
 ## 3. Cómo se conecta todo
 
@@ -120,32 +112,7 @@ Ejemplo de cómo se ve el accounting:
 
 Son **4 máquinas virtuales** en **3 redes**. El router está en el medio: de un lado tiene a los abonados y del otro al servidor.
 
-```
-        RED DE ACCESO                                         RED DE SERVICIOS
-     red interna "isp-acceso"                              red interna "isp-servicios"
-   VLAN 100 · pool 100.64.1.10-100                              10.10.50.0/24
-
- ┌────────────────┐                                       ┌──────────────────────────────────┐
- │   abonado1     │                                       │          isp-servicios           │
- │   (MikroTik)   ├──┐                                    │      Debian 12 + Docker          │
- │ IP: la da el   │  │    ┌───────────────────────────┐   │      IP 10.10.50.10              │
- │ router (PPPoE) │  │    │        isp-router         │   │                                  │
- └────────────────┘  │    │       (MikroTik CHR)      │   │   Contenedores:                  │
-                     ├────┤ ether2            ether3  ├───┤   ├─ FreeRADIUS   1812 y 1813    │
- ┌────────────────┐  │    │ + VLAN 100   10.10.50.1   │   │   ├─ PostgreSQL   5432 (interno) │
- │   abonado2     │  │    │                           │   │   ├─ Grafana      3000           │
- │   (MikroTik)   ├──┘    │ servidor PPPoE            │   │   └─ métricas y logs (a definir) │
- │ IP: la da el   │       │ cliente RADIUS            │   │                                  │
- │ router (PPPoE) │       └─────────────┬─────────────┘   └────────────────┬─────────────────┘
- └────────────────┘                     │ ether1                           │ adaptador NAT
-                                        │                                  │
- ┌──────────────────────────────────────┴──────────────────────────────────┴─────────────────┐
- │  NOTEBOOK DE LA PRESENTACIÓN (VirtualBox)                                                 │
- │  · Red de gestión (solo-anfitrión): para entrar a los MikroTik con WinBox                 │
- │  · Por el NAT, isp-servicios baja las imágenes de Docker y Grafana se abre en             │
- │    el navegador en http://localhost:3000                                                  │
- └───────────────────────────────────────────────────────────────────────────────────────────┘
-```
+![Topología del proyecto RADIUS](topologia.png)
 
 **Cómo leer el dibujo:**
 
@@ -170,7 +137,7 @@ Cada adaptador de VirtualBox se conecta a una red. Los nombres de las redes inte
 - Docker va **adentro de la VM Debian**, no con Docker Desktop en Windows. Así todas las VMs se ven en la misma red interna.
 - En Debian, el nombre `enp0s8` es el habitual. Se confirma con `ip -br a`.
 
----
+> **Ojo con los nombres ether1/2/3.** En las prácticas de Redes (P3 y P6) los clones del CHR quedaron con la numeración corrida: el adaptador 1 aparecía como `ether3`. Antes de configurar, cada uno corre `/interface ethernet print` y compara las MAC con las de VirtualBox. Si los nombres no coinciden con la tabla, se ajustan los comandos (o se renombran las interfaces) y se avisa al grupo.
 
 ## 4. Datos comunes
 
@@ -208,8 +175,8 @@ Los planes se miden en **megabits por segundo** (Mbps), no en megabytes. En el M
 | Dato | Valor | Para qué |
 | --- | --- | --- |
 | Base | `radius` | Donde FreeRADIUS guarda todo |
-| Usuario `radius` | Contraseña a definir | Lo usa FreeRADIUS: lee y escribe |
-| Usuario `grafana_ro` | Contraseña a definir | Lo usa Grafana: solo lectura |
+| Usuario `radius` | Contraseña a definir (parte 1) | Lo usa FreeRADIUS: lee y escribe |
+| Usuario `grafana_ro` | Contraseña a definir (parte 1) | Lo usa Grafana: solo lectura |
 
 Grafana solo necesita mirar. Si tuviera permiso de escritura y algo sale mal, podría romper la base. Es el principio de **mínimo privilegio**.
 
@@ -228,30 +195,26 @@ Un puerto es como el "número de departamento" dentro de una IP: indica a qué p
 
 ### Versiones
 
-Fijamos la versión de todo, para no terminar con versiones distintas si cada uno baja "la última".
-
 - **RouterOS:** 7.20.4.
-- **Imágenes de Docker:** una versión fija para cada una. La anota cada responsable en el repo.
+- **Imágenes de Docker:** una versión fija para cada una (nada de "latest"). La anota cada responsable en el repo.
 
 ### Hora
 
 Todas las máquinas en la zona horaria **America/Argentina/Buenos_Aires**. Si una máquina tiene otra hora, Grafana muestra los datos corridos y los eventos no coinciden entre el router y el servidor.
 
----
-
 ## 5. División del trabajo
 
 Una pieza por persona, pensada para que cada uno pueda arrancar **sin esperar a los demás**. Las piezas se juntan al final (ver sección 9).
 
-| # | Parte | Qué hace | Cómo avanza solo | Responsable |
+| # | Parte | Responsable | Qué hace | Cómo avanza solo |
 | --- | --- | --- | --- | --- |
-| 1 | Base de datos | Prepara PostgreSQL para que FreeRADIUS guarde usuarios, planes y accounting. Piensa qué datos de accounting mostrar y arma esos paneles en Grafana. | Carga datos de accounting inventados para tener qué consultar | |
-| 2 | FreeRADIUS | Hace funcionar el servidor RADIUS y que lea los usuarios y planes desde la base. Se ocupa del rechazo de moroso y del corte en el momento. | Usa `radtest`, una herramienta que simula el pedido de un router sin tener el MikroTik | |
-| 3 | Router (MikroTik) | Hace que el router acepte conexiones PPPoE y le pregunte al RADIUS. Deja listos sus datos (CPU, memoria, logs) para que Grafana los pueda leer. | Crea usuarios PPPoE directo en el router, sin RADIUS | |
-| 4 | Abonados y pruebas | Simula al menos 2 clientes que se conectan y generan tráfico. Prueba qué pasa cuando algo falla, por ejemplo si se cae el RADIUS. | Se conecta al router con los usuarios locales | |
-| 5 | Grafana | Levanta Grafana, investiga cómo llevarle los datos del router y arma el tablero general. | Usa el router solo, y los datos inventados de la base | |
+| 1 | Base de datos | **Agus** | Prepara PostgreSQL para que FreeRADIUS guarde usuarios, planes y accounting. Piensa qué datos de accounting mostrar y arma esos paneles en Grafana. | Carga datos de accounting inventados para tener qué consultar |
+| 2 | FreeRADIUS | **Nico** | Hace funcionar el servidor RADIUS y que lea los usuarios y planes desde la base. Se ocupa del rechazo de moroso y del corte en el momento. | Usa `radtest`, que simula el pedido de un router sin tener el MikroTik |
+| 3 | Router (MikroTik) | **Nacho** | Hace que el router acepte conexiones PPPoE y le pregunte al RADIUS. Deja listos sus datos (CPU, memoria, logs) para que Grafana los pueda leer. | Crea usuarios PPPoE directo en el router, sin RADIUS |
+| 4 | Abonados y pruebas | **Rodri** | Simula al menos 2 clientes que se conectan y generan tráfico. Prueba qué pasa cuando algo falla, por ejemplo si se cae el RADIUS. | Se conecta al router con los usuarios locales |
+| 5 | Grafana | **Igna** | Levanta Grafana, investiga cómo llevarle los datos del router y arma el tablero general. | Usa el router solo, y los datos inventados de la base |
 
-- Las partes **1 y 5 comparten Grafana**: la 5 arma la base del tablero y la 1 suma los paneles de accounting. Así la carga queda pareja.
+- Las partes **1 y 5 comparten Grafana**: la 5 arma la base del tablero y la 1 suma los paneles de accounting.
 - Aunque cada uno tenga su parte, **todos investigan lo básico** (sección 2), porque nos pueden preguntar cualquier cosa a cualquiera.
 
 ### Qué tiene que investigar cada parte
@@ -265,50 +228,50 @@ Una pieza por persona, pensada para que cada uno pueda arrancar **sin esperar a 
 - Qué pasa si el RADIUS se cae.
 - La diferencia entre una métrica y un log.
 
-**1 · Base de datos**
+**1 · Base de datos (Agus)**
 
 - Qué tablas usa FreeRADIUS y qué guarda cada una:
   - `radcheck`: usuarios y contraseñas.
   - `radusergroup` y `radgroupreply`: planes.
   - `radacct`: accounting.
   - `radpostauth`: intentos de login, aceptados y rechazados.
+
 - Cómo crear el usuario de solo lectura `grafana_ro`.
 - Cómo hacer que los datos no se pierdan al recrear el contenedor (volúmenes de Docker).
 
-**2 · FreeRADIUS**
+**2 · FreeRADIUS (Nico)**
 
 - Cómo se organiza la configuración de FreeRADIUS.
 - Cómo conectarlo a PostgreSQL (el módulo `sql`).
-- Cómo dar de alta al router como cliente.
+- Cómo dar de alta al router como cliente (`clients.conf`).
 - Cómo devolver la velocidad del plan (atributo `Mikrotik-Rate-Limit`).
 - Cómo rechazar a moroso.
 - Cómo mandar un Disconnect con `radclient`.
 
-**3 · Router**
+**3 · Router (Nacho)**
 
 - Cómo se configura en RouterOS 7.20.4:
   - El cliente RADIUS: `/radius` y `/ppp aaa`.
   - El envío de accounting cada minuto (`interim-update`).
   - Que el router acepte cortes desde el RADIUS (`/radius incoming`).
+
 - Cómo exponer CPU, memoria y logs para que se puedan leer desde afuera, junto con la parte 5.
 
-**4 · Abonados y pruebas**
+**4 · Abonados y pruebas (Rodri)**
 
 - Cómo configurar el cliente PPPoE sobre la VLAN 100.
-- Cómo generar tráfico. Por ejemplo, `/tool bandwidth-test` del propio MikroTik.
+- Cómo generar tráfico, por ejemplo con `/tool bandwidth-test` del propio MikroTik. Conviene probar de un abonado al otro, para que el tráfico **pase por** el router y le apliquen los límites del plan.
 - Qué esperamos ver en cada prueba de falla (sección 10).
 
-**5 · Grafana**
+**5 · Grafana (Igna)**
 
 - Cómo conectar Grafana a PostgreSQL, a las métricas y a los logs.
 - Qué herramienta usar para llevarle los datos del router (sección 7).
 - Cómo guardar el tablero y las conexiones como archivos en el repo.
 
----
-
 ## 6. Configuración base (punto de partida)
 
-Con esto queda armada la red y el PPPoE con usuarios locales, para que las partes 3 y 4 puedan arrancar. Es un **boceto**: cada responsable lo revisa, entiende cada línea y lo deja en el repo.
+Con esto queda armada la red y el PPPoE con usuarios locales, para que las partes 3 y 4 puedan arrancar. Es un **boceto**: cada responsable lo revisa, entiende cada línea y lo deja en el repo. Antes, confirmar los nombres de las interfaces (ver el aviso de la sección 3).
 
 ### isp-router
 
@@ -363,11 +326,13 @@ iface enp0s8 inet static
     address 10.10.50.10/24
 ```
 
-En la notebook, para abrir Grafana en `http://localhost:3000` (con la VM encendida):
+En la notebook, para abrir Grafana en `http://localhost:3000`. Con la VM **apagada**, así la regla queda guardada:
 
 ```
-VBoxManage controlvm isp-servicios natpf1 "grafana,tcp,127.0.0.1,3000,,3000"
+VBoxManage modifyvm isp-servicios --natpf1 "grafana,tcp,127.0.0.1,3000,,3000"
 ```
+
+(Con `VBoxManage controlvm ... natpf1` también funciona con la VM prendida, pero la regla se pierde al apagarla. Nos pasó en la P6 de Servidores.)
 
 ### Prueba de que la red quedó bien
 
@@ -376,11 +341,9 @@ VBoxManage controlvm isp-servicios natpf1 "grafana,tcp,127.0.0.1,3000,,3000"
 - [ ] Los dos abonados aparecen en `/ppp active print` del router, con una IP 100.64.1.x.
 - [ ] En `/queue simple print` aparecen las colas `<pppoe-abonado1>` (10M) y `<pppoe-abonado2>` (50M), creadas solas por el plan.
 
----
+## 7. Cómo llevar los datos a Grafana (decide la parte 5)
 
-## 7. Cómo llevar los datos a Grafana (a decidir por la parte 5)
-
-Grafana no junta datos por sí misma: lee de "fuentes de datos". Para el accounting es fácil, porque Grafana se conecta directo a PostgreSQL. Para el router hace falta algo que le pida o reciba los datos y los guarde. Esta es una de las decisiones que más nos van a preguntar: hay que elegir una opción y saber por qué se descartaron las otras.
+Grafana no junta datos por sí misma: lee de "fuentes de datos". Para el accounting es fácil, porque Grafana se conecta directo a PostgreSQL. Para el router hace falta algo que le pida o reciba los datos y los guarde. Es una de las decisiones que más nos van a preguntar: hay que elegir una opción y saber por qué se descartaron las otras.
 
 | Qué dato | Algunas opciones para investigar |
 | --- | --- |
@@ -394,24 +357,22 @@ Preguntas que ayudan a decidir:
 - ¿Cuántas piezas nuevas suma cada opción, y cuánto cuesta explicarlas?
 - Un contador de bytes solo sube. ¿Cómo se muestra la velocidad (bytes por segundo) en lugar del total?
 
-Lo que se elija se suma al `docker-compose.yml` de isp-servicios y a la tabla de puertos.
-
----
+Lo que se elija se suma al `docker-compose.yml` de isp-servicios y a la tabla de puertos. La guía de `referencia/guia-proyecto-radius.md` propone Telegraf + Prometheus + Loki y explica alternativas: sirve como punto de partida (ver sección 15).
 
 ## 8. Repositorio y cómo documentar
 
 Usamos un repositorio Git del grupo, con una carpeta por parte:
 
 ```
-plan-de-trabajo.md   ← este documento
-acuerdos.md          ← los datos comunes (sección 4), si se separan
-docker/              ← el docker-compose.yml
+plan-de-trabajo.md  ← este documento
+referencia/         ← material de consulta (la guía larga)
+docker/             ← el docker-compose.yml
 postgres/
 freeradius/
-mikrotik/            ← la configuración exportada del router (/export)
+mikrotik/           ← la configuración exportada del router (/export)
 abonados/
-grafana/             ← el tablero exportado
-notas/               ← un archivo de decisiones por persona
+grafana/            ← el tablero exportado
+notas/              ← un archivo de decisiones por persona
 ```
 
 **Regla clave:** todo lo que se configura tiene que quedar en un archivo del repo. No alcanza con "lo hice a mano en mi compu": si no está en el repo, no se puede juntar ni rearmar en la máquina de la presentación.
@@ -426,8 +387,6 @@ notas/               ← un archivo de decisiones por persona
 
 Anotamos **mientras** trabajamos, no al final: dos semanas después nadie se acuerda, y es justo lo que van a preguntar.
 
----
-
 ## 9. Cómo integrar las partes
 
 Juntamos las piezas de a una conexión por vez, siguiendo el recorrido del abonado. Lo hacemos en una reunión o llamada con todos, en la máquina de la presentación.
@@ -440,12 +399,12 @@ Cada uno "termina" su parte cuando:
 
 | Paso | Qué se conecta | Prueba de que anda | Lideran |
 | --- | --- | --- | --- |
-| 1 | Levantar todo desde el repo | Prenden las VMs y los contenedores | 1 y 2 |
-| 2 | FreeRADIUS ↔ PostgreSQL | `radtest` acepta a abonado1 y rechaza a moroso, sin router | 1 y 2 |
-| 3 | Router ↔ RADIUS | Se borran los usuarios locales del router: abonado1 igual entra y moroso es rechazado | 2 y 3 |
-| 4 | Abonados navegando | Los 2 abonados generan tráfico y aparecen filas en la tabla de accounting, que se actualizan cada minuto | 3 y 4 |
-| 5 | Grafana | Se ven CPU, memoria, logs y accounting cambiando en vivo | 5 y 1 |
-| 6 | Pruebas de falla | Apagar el RADIUS y ver qué les pasa a los abonados | 4 |
+| 1 | Levantar todo desde el repo | Prenden las VMs y los contenedores | Agus y Nico |
+| 2 | FreeRADIUS ↔ PostgreSQL | `radtest` acepta a abonado1 y rechaza a moroso, sin router | Agus y Nico |
+| 3 | Router ↔ RADIUS | Se borran los usuarios locales del router: abonado1 igual entra y moroso es rechazado | Nico y Nacho |
+| 4 | Abonados navegando | Los 2 abonados generan tráfico y aparecen filas en la tabla de accounting, que se actualizan cada minuto | Nacho y Rodri |
+| 5 | Grafana | Se ven CPU, memoria, logs y accounting cambiando en vivo | Igna y Agus |
+| 6 | Pruebas de falla | Las de la sección 10 | Rodri |
 
 **Reglas para que salga bien:**
 
@@ -454,11 +413,11 @@ Cada uno "termina" su parte cuando:
 - **Anotamos cada problema y cómo lo resolvimos.** "Cómo diagnosticaron lo que falló" es un criterio de evaluación: los errores de la integración son material para la presentación.
 - **Al final sacamos una "foto":** un snapshot de las VMs y un commit marcado como versión de la presentación. Si el 26 algo se rompe, volvemos ahí.
 
-### Cronograma propuesto
+### Cronograma
 
 | Día | Objetivo |
 | --- | --- |
-| Mié 18 | Leer este documento, repartir las partes y crear el repo |
+| Mié 18 | Leer el plan, repartir las partes y crear el repo |
 | Jue 19 (consulta) | Mostrar la topología y las dudas. Cada uno arranca con su parte |
 | Vie 20 a dom 22 | Cada parte anda sola, desde el repo |
 | Dom 22 o lun 23 | Integración, pasos 1 a 5 |
@@ -467,24 +426,20 @@ Cada uno "termina" su parte cuando:
 | Mié 25 (consulta) | Mostrar la demo completa, ajustar y segundo ensayo |
 | Jue 26 | Presentación |
 
----
-
 ## 10. Pruebas de falla
 
-Las hacemos antes de la presentación y anotamos qué pasó. Responder "¿qué pasa si...?" con algo que ya probamos vale mucho más que con una suposición.
+Las hacemos antes de la presentación y anotamos qué pasó. Responder "¿qué pasa si...?" con algo que ya probamos vale mucho más que con una suposición. La columna de la derecha es lo que **esperamos**: si pasa otra cosa, se anota y se investiga.
 
 | Prueba | Cómo se provoca | Qué esperamos ver |
 | --- | --- | --- |
 | Se cae el RADIUS | Apagar el contenedor de FreeRADIUS | Los abonados ya conectados siguen navegando, porque el router ya los autorizó. Uno que se reconecta no puede entrar. El accounting deja de actualizarse. |
 | Se cae la base | Apagar el contenedor de PostgreSQL, con FreeRADIUS prendido | FreeRADIUS no puede verificar a nadie. Comparar con la prueba anterior. |
-| Secreto distinto | Cambiar el secreto en un solo lado | El RADIUS ignora los pedidos y el router dice que no responde. Es un buen ejemplo de diagnóstico para contar. |
+| Secreto distinto | Cambiar el secreto en un solo lado | El router dice que el RADIUS no responde: o el RADIUS descarta el pedido, o el router descarta la respuesta. Ver en `freeradius -X` cuál de las dos pasa. Buen ejemplo de diagnóstico para contar. |
 | Contraseña incorrecta | Cambiar la clave en un abonado | Rechazo, y queda registrado como intento fallido |
 | Moroso | Conectar con el usuario moroso | Rechazo |
 | Cambio de plan | Pasar a abonado1 de 10 a 50 Mbps en la base, y reconectar | La velocidad cambia sin tocar el router |
 | Corte en el momento | Bloquear a un abonado conectado y mandar un Disconnect | Se desconecta al instante y no puede volver a entrar |
 | Router cargado | Generar tráfico desde los dos abonados | La CPU del router sube en el tablero |
-
----
 
 ## 11. Ideas para el tablero
 
@@ -500,21 +455,18 @@ El mínimo es CPU, memoria, logs y accounting. Lo que suma en "Creatividad" es m
 
 Conviene elegir 3 o 4, hacerlos bien y tener una frase que justifique cada uno.
 
----
-
 ## 12. Decisiones pendientes
 
 | Decisión | Opciones | Quién la propone |
 | --- | --- | --- |
-| Cómo se bloquea a moroso | Un grupo "bloqueado" en la base, o marcar al usuario para que siempre se rechace | Partes 1 y 2 |
-| Cómo llevar CPU, memoria y logs del router a Grafana | Ver sección 7 | Partes 5 y 3 |
-| Contraseñas de la base | — | Parte 1 |
+| En qué computadora se presenta | La que tenga más RAM | Todos |
+| Quién arma las VMs base | Propuesta: Nacho arma el CHR base y clona las 3 VMs MikroTik; Agus arma isp-servicios con Docker y el `docker-compose.yml` base | Todos |
+| Cómo se bloquea a moroso | Un grupo "bloqueado" en la base, o marcar al usuario para que siempre se rechace | Agus y Nico |
+| Cómo llevar CPU, memoria y logs del router a Grafana | Ver sección 7 | Igna y Nacho |
+| Contraseñas de la base | — | Agus |
 | Versiones de las imágenes de Docker | — | Cada responsable |
-| Responsables de cada parte | — | Todos, hoy |
 
-**Grafana en la misma VM que el RADIUS:** lo elegimos así para ahorrar RAM y simplificar. Es probable que nos pregunten qué pasa si se cae esa VM: se caen el RADIUS y también el tablero que lo mostraría. Respuesta preparada: en un ISP real, el monitoreo va en otra máquina, separado de lo que vigila.
-
----
+> **Grafana en la misma VM que el RADIUS:** lo elegimos así para ahorrar RAM y simplificar. Es probable que nos pregunten qué pasa si se cae esa VM: se caen el RADIUS y también el tablero que lo mostraría. Respuesta preparada: en un ISP real, el monitoreo va en otra máquina, separado de lo que vigila.
 
 ## 13. Lo que todos tenemos que poder responder
 
@@ -528,12 +480,11 @@ Antes del 26, cualquiera del grupo tiene que poder contestar sin ayuda:
 6. Si fuéramos quienes operan el ISP, ¿qué querríamos ver en el tablero?
 7. ¿Qué les pasa a los abonados si el RADIUS se cae?
 
----
-
 ## 14. Problemas comunes y dónde mirar
 
 | Síntoma | Causa probable | Dónde mirar |
 | --- | --- | --- |
+| Un comando da "no such item" o la interfaz queda "unknown" | El clon del CHR tiene otra numeración de interfaces | `/interface ethernet print`, comparando las MAC con VirtualBox |
 | El abonado no se conecta y las credenciales están bien | La VLAN no coincide en las dos puntas. Ningún log dice "VLAN" | `/interface vlan print` en el router y en el abonado |
 | El router dice que el RADIUS no responde | Secreto distinto, IP equivocada, o el RADIUS no conoce al router | `freeradius -X` muestra si el pedido llega y desde qué IP |
 | El pedido llega al RADIUS con una IP rara (172.x) | Docker cambia la dirección de origen | Anotarlo y buscar cómo publicar el puerto sin que cambie el origen |
@@ -542,3 +493,20 @@ Antes del 26, cualquiera del grupo tiene que poder contestar sin ayuda:
 | Los datos aparecen corridos 3 horas | Zona horaria distinta entre máquinas | `timedatectl` en Debian, `/system clock print` en el router |
 | Se perdió la base al recrear el contenedor | PostgreSQL sin volumen | El `docker-compose.yml` |
 | Dos abonados no pueden conectarse a la vez | Clonados con la misma MAC | Regenerar la MAC en VirtualBox |
+| Grafana no abre en localhost:3000 después de reiniciar | La regla de NAT se cargó con `controlvm` y se perdió | Cargarla con `modifyvm` y la VM apagada (sección 6) |
+
+## 15. Material de referencia
+
+En el repo, `referencia/guia-proyecto-radius.md` es una guía larga hecha con IA **antes** de la reunión. Sirve para consultar comandos y alternativas, pero **no se sigue al pie de la letra**: usa otro diseño. Ante cualquier diferencia, vale este documento.
+
+| Tema | En la guía | Lo que acordamos (este documento) |
+| --- | --- | --- |
+| Nombres de las VMs | srv1, CHR-ISP, cli1 y cli2 | isp-servicios, isp-router, abonado1 y abonado2 |
+| Red de servicios | Solo-anfitrión 192.168.56.0/24 (router .10, srv1 .20) | Red interna 10.10.50.0/24 (router .1, servidor .10) |
+| Pool de abonados | 10.10.0.10 a 10.10.0.100 (router 10.10.0.1) | 100.64.1.10 a 100.64.1.100 (router 100.64.1.1) |
+| Red de acceso | Sin VLAN | VLAN 100 |
+| Abonados | VMs Debian con `pppd` y tráfico con iperf3 | VMs MikroTik CHR y tráfico con bandwidth-test |
+| Planes | plan-basico y plan-plus | 10 Mbps y 50 Mbps |
+| Syslog | Puerto 6514/udp | A definir por la parte 5 (514/udp es el estándar) |
+
+En la carpeta del Drive, **Practicas/Redes** y **Practicas/Servidores** tienen los enunciados de las prácticas que nos sirven de base: P6 de Redes (PPPoE), P6 de Servidores (observabilidad) y P8 de Servidores (Vagrant).

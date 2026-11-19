@@ -26,6 +26,7 @@ Cada carpeta tiene un `README.md` con qué va ahí y cuándo esa parte está "te
 .
 ├── README.md                 ← este archivo
 ├── plan-de-trabajo.md        ← plan del grupo y datos comunes
+├── referencia/               ← material de consulta (la guía larga, no se sigue al pie de la letra)
 ├── topologia.png
 ├── docker-compose.yml        ← todos los contenedores de isp-servicios
 ├── .env.example              ← variables de ejemplo (copiar a .env)

@@ -1,3 +1,5 @@
+> **Material de consulta.** Esta guía se hizo con IA antes de la reunión del grupo y usa otro diseño (otras IPs, otros nombres de máquinas, abonados Debian). Sirve para consultar comandos y alternativas, pero **no se sigue al pie de la letra**. Ante cualquier diferencia, vale [`plan-de-trabajo.md`](../plan-de-trabajo.md) (sección 15).
+
 # Guía completa: RADIUS, accounting y monitoreo para un ISP simulado
 
 Proyecto final de Administración de Servicios en Linux (UTN). Presentación: jueves 26 de noviembre.
