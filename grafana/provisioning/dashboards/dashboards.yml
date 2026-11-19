@@ -1,0 +1,10 @@
+apiVersion: 1
+
+providers:
+  - name: isp-noc
+    type: file
+    folder: ISP
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

@@ -191,7 +191,9 @@ Un puerto es como el "número de departamento" dentro de una IP: indica a qué p
 | Corte en el momento (Disconnect) | 3799/udp | El RADIUS le avisa al router. Este puerto está en el router, no en el servidor |
 | Grafana | 3000/tcp | Nosotros, desde el navegador de la notebook |
 | PostgreSQL | 5432/tcp | Solo FreeRADIUS y Grafana, adentro de Docker. No se publica afuera |
-| Métricas y logs del router | Depende de la herramienta | Por ejemplo, SNMP usa 161/udp y syslog 514/udp. Lo define la parte 5 |
+| SNMP (métricas del router) | 161/udp | isp-servicios (Alloy) le pregunta al router. Decidido en la parte 5 |
+| Syslog (logs del router) | 1514/udp | El router los manda a isp-servicios:1514 (Alloy). Decidido en la parte 5 |
+| Alloy (diagnóstico) / Prometheus (diagnóstico) | 12345/tcp y 9090/tcp | Solo si se define `GESTION_IP` en `.env`; por defecto quedan en 127.0.0.1 |
 
 ### Versiones
 
@@ -516,6 +518,6 @@ En el repo, `referencia/guia-proyecto-radius.md` es una guía larga hecha con IA
 | Red de acceso | Sin VLAN | VLAN 100 |
 | Abonados | VMs Debian con `pppd` y tráfico con iperf3 | VMs MikroTik CHR y tráfico con bandwidth-test |
 | Planes | plan-basico y plan-plus | 10 Mbps y 50 Mbps |
-| Syslog | Puerto 6514/udp | A definir por la parte 5 (514/udp es el estándar) |
+| Syslog | Puerto 6514/udp | 1514/udp (decidido en la parte 5, ver `notas/igna.md`) |
 
 En la carpeta del Drive, **Practicas/Redes** y **Practicas/Servidores** tienen los enunciados de las prácticas que nos sirven de base: P6 de Redes (PPPoE), P6 de Servidores (observabilidad) y P8 de Servidores (Vagrant).

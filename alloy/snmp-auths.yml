@@ -1,0 +1,5 @@
+# Comunidad SNMP del laboratorio (acordar el nombre con nacho).
+auths:
+  lab_v2:
+    community: lab-monitoreo
+    version: 2

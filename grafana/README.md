@@ -8,14 +8,15 @@ Grafana arma el tablero del ISP: estado del router (CPU, memoria, logs) y lo que
 
 ```
 grafana/
-└── provisioning/
-    ├── datasources/   ← las fuentes de datos (PostgreSQL y las que se elijan)
-    └── dashboards/    ← el tablero exportado como JSON y el archivo que lo carga
+├── provisioning/
+│   ├── datasources/   ← las fuentes de datos (Prometheus, Loki y PostgreSQL)
+│   └── dashboards/    ← el archivo que carga los tableros
+└── dashboards/        ← el tablero exportado como JSON
 ```
 
-El `docker-compose.yml` ya monta `./grafana/provisioning` en el contenedor. Así Grafana arranca con todo configurado, sin tocar nada a mano.
+El `docker-compose.yml` ya monta `./grafana/provisioning` y `./grafana/dashboards` en el contenedor. Así Grafana arranca con todo configurado, sin tocar nada a mano.
 
-Si se suman herramientas para las métricas y los logs del router (por ejemplo Telegraf, Prometheus o Loki), cada una va en su propia carpeta en la raíz del repo.
+Las herramientas que llevan los datos del router hasta Grafana van cada una en su carpeta en la raíz del repo: [`alloy/`](../alloy/) (recolector de SNMP y syslog) y [`prometheus/`](../prometheus/). Loki usa la configuración por defecto de su imagen. Por qué se eligió Alloy: ver [`../notas/igna.md`](../notas/igna.md).
 
 ## Datos que usa (de `plan-de-trabajo.md`)
 

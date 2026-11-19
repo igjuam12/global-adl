@@ -35,6 +35,8 @@ Cada carpeta tiene un `README.md` con qué va ahí y cuándo esa parte está "te
 ├── mikrotik/                 ← Parte 3: configuración exportada de isp-router
 ├── abonados/                 ← Parte 4: configuración de abonados y pruebas
 ├── grafana/                  ← Parte 5: fuentes de datos y tablero
+├── alloy/                    ← Parte 5: recolector de SNMP y syslog del router
+├── prometheus/               ← Parte 5: base de métricas
 └── notas/                    ← un archivo de decisiones por persona
 ```
 
