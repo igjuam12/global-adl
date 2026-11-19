@@ -1,0 +1,10 @@
+# Saltos de línea de Linux (LF) para todo el texto del repo.
+# Evita que Git en Windows convierta a CRLF los scripts y configuraciones
+# que después corren adentro de los contenedores o en RouterOS.
+* text=auto eol=lf
+
+# Archivos binarios: Git no los toca
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
