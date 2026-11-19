@@ -1,0 +1,8 @@
+# Archivo de secretos locales - No versionar en Git
+.env
+
+# Archivos temporales y de sistema operativo
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
