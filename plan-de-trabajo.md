@@ -132,7 +132,7 @@ Cada adaptador de VirtualBox se conecta a una red. Los nombres de las redes inte
 | abonado2 | Cliente, MikroTik | Gestión (solo-anfitrión) → `ether1` | `isp-acceso` → `ether2` | — | 256 MB |
 | isp-servicios | Debian 12 con Docker | NAT → `enp0s3` | `isp-servicios` → `enp0s8` | — | 2 GB |
 
-- Son unos **3 GB** de RAM en total. Presentamos en la computadora con más RAM.
+- Son unos **3 GB** de RAM en total. Cada uno las arma en su PC (sección 9). Presentamos en la computadora con más RAM.
 - Todas las VMs MikroTik se **clonan de un CHR base limpio**. Al clonar, elegir **"generar nuevas direcciones MAC"**: dos abonados con la misma MAC dan problemas con PPPoE.
 - Docker va **adentro de la VM Debian**, no con Docker Desktop en Windows. Así todas las VMs se ven en la misma red interna.
 - En Debian, el nombre `enp0s8` es el habitual. Se confirma con `ip -br a`.
@@ -389,7 +389,15 @@ Anotamos **mientras** trabajamos, no al final: dos semanas después nadie se acu
 
 ## 9. Cómo integrar las partes
 
-Juntamos las piezas de a una conexión por vez, siguiendo el recorrido del abonado. Lo hacemos en una reunión o llamada con todos, en la máquina de la presentación.
+**Cada uno integra en su propia PC, a su tiempo.** Así no dependemos de juntarnos todos, y cada uno ve el proyecto completo funcionando y entiende cómo se conectan las piezas (nos pueden preguntar cualquier cosa a cualquiera).
+
+Para que todos lleguemos al mismo resultado, seguimos la misma metodología:
+
+- **El repo es la única fuente.** Se integra clonando el repo, no copiando archivos entre compus. Si algo anda en tu PC pero no está en el repo, no cuenta.
+- **Las VMs se arman todas igual**, con los datos de las secciones 3, 4 y 6 (nombres de redes, IPs, adaptadores, versiones).
+- **Se siguen los mismos pasos, en el mismo orden** (tabla de abajo), juntando las piezas de a una conexión por vez, siguiendo el recorrido del abonado.
+- Cada paso se puede hacer recién cuando las partes que conecta ya están en el repo. Si te trabás en un paso, consultás a quien figura como referente.
+- Cada uno necesita unos **3 GB de RAM libres** para tener las 4 VMs prendidas.
 
 Cada uno "termina" su parte cuando:
 
@@ -397,7 +405,7 @@ Cada uno "termina" su parte cuando:
 - Tiene una prueba que demuestra que anda.
 - Sus notas están al día.
 
-| Paso | Qué se conecta | Prueba de que anda | Lideran |
+| Paso | Qué se conecta | Prueba de que anda | Referentes (a quién consultar) |
 | --- | --- | --- | --- |
 | 1 | Levantar todo desde el repo | Prenden las VMs y los contenedores | Agus y Nico |
 | 2 | FreeRADIUS ↔ PostgreSQL | `radtest` acepta a abonado1 y rechaza a moroso, sin router | Agus y Nico |
@@ -411,7 +419,8 @@ Cada uno "termina" su parte cuando:
 - **Un cambio por vez.** Si conectamos tres cosas juntas y falla, no sabemos cuál fue.
 - **Si algo falla, miramos los logs de las dos puntas** antes de cambiar nada. Por ejemplo, el log del router (`/log print`) y el del RADIUS (`freeradius -X` lo muestra en detalle).
 - **Anotamos cada problema y cómo lo resolvimos.** "Cómo diagnosticaron lo que falló" es un criterio de evaluación: los errores de la integración son material para la presentación.
-- **Al final sacamos una "foto":** un snapshot de las VMs y un commit marcado como versión de la presentación. Si el 26 algo se rompe, volvemos ahí.
+- **Si al integrar tenés que corregir algo de otra parte, avisás a su responsable** en vez de cambiarlo por tu cuenta. El arreglo lo sube él al repo, así todos lo reciben.
+- **Al final sacamos una "foto":** un commit marcado como versión de la presentación, y un snapshot de las VMs en la compu donde presentamos. Si el 26 algo se rompe, volvemos ahí. Como todos tenemos el proyecto andando, cualquier compu sirve de respaldo.
 
 ### Cronograma
 
@@ -420,7 +429,7 @@ Cada uno "termina" su parte cuando:
 | Mié 18 | Leer el plan, repartir las partes y crear el repo |
 | Jue 19 (consulta) | Mostrar la topología y las dudas. Cada uno arranca con su parte |
 | Vie 20 a dom 22 | Cada parte anda sola, desde el repo |
-| Dom 22 o lun 23 | Integración, pasos 1 a 5 |
+| Dom 22 o lun 23 | Cada uno integra en su PC, pasos 1 a 5 |
 | Lun 23 | Extras del tablero |
 | Mar 24 | Pruebas de falla, snapshot y primer ensayo con preguntas cruzadas |
 | Mié 25 (consulta) | Mostrar la demo completa, ajustar y segundo ensayo |
@@ -460,7 +469,7 @@ Conviene elegir 3 o 4, hacerlos bien y tener una frase que justifique cada uno.
 | Decisión | Opciones | Quién la propone |
 | --- | --- | --- |
 | En qué computadora se presenta | La que tenga más RAM | Todos |
-| Quién arma las VMs base | Propuesta: Nacho arma el CHR base y clona las 3 VMs MikroTik; Agus arma isp-servicios con Docker y el `docker-compose.yml` base | Todos |
+| Guía para armar las VMs | Cada uno arma sus propias VMs (sección 9). Las secciones 3 y 6 son la guía común; si alguien encuentra un paso que falta, lo agrega ahí | Todos |
 | Cómo se bloquea a moroso | Un grupo "bloqueado" en la base, o marcar al usuario para que siempre se rechace | Agus y Nico |
 | Cómo llevar CPU, memoria y logs del router a Grafana | Ver sección 7 | Igna y Nacho |
 | Contraseñas de la base | — | Agus |
