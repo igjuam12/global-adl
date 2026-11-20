@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1520" viewBox="0 0 2400 1520"
+     font-family="'Segoe UI', Inter, Arial, sans-serif">
+  <!--
+    Topología del proyecto RADIUS. Este archivo es la fuente editable; topologia.png
+    es una captura de este dibujo a 2400 x 1520.
+  -->
+  <defs>
+    <marker id="flecha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/>
+    </marker>
+  </defs>
+
+  <rect width="2400" height="1520" fill="#ffffff"/>
+
+  <!-- Título -->
+  <text x="40" y="92" font-size="50" font-weight="700" fill="#1a2233">Topología del proyecto RADIUS</text>
+  <text x="40" y="148" font-size="28" fill="#5b6472">5 máquinas virtuales · 3 redes · todo en una notebook con VirtualBox</text>
+
+  <!-- ===================== RED DE ACCESO ===================== -->
+  <rect x="40" y="200" width="640" height="940" rx="28" fill="#e8f1fd" stroke="#9dbde6" stroke-width="2.5"/>
+  <text x="76" y="262" font-size="28" font-weight="700" fill="#1f5fae">RED DE ACCESO</text>
+  <text x="76" y="304" font-size="24" fill="#2c3b55">red interna isp-acceso · VLAN 100</text>
+  <text x="76" y="340" font-size="24" fill="#2c3b55">pool 100.64.1.10 – 100.64.1.100</text>
+
+  <rect x="90" y="440" width="430" height="225" rx="18" fill="#ffffff" stroke="#7ba3d6" stroke-width="2.5"/>
+  <text x="126" y="500" font-size="34" font-weight="700" fill="#1a2233">abonado1</text>
+  <text x="126" y="540" font-size="24" fill="#6b7280">MikroTik CHR · plan 512k</text>
+  <text x="126" y="594" font-size="24" fill="#1a2233">ether2 + VLAN 100</text>
+  <text x="126" y="633" font-size="24" fill="#1a2233">IP: la asigna el router</text>
+
+  <text x="126" y="733" font-size="25" fill="#1a2233"><tspan font-weight="700">PPPoE</tspan> · usuario y contraseña</text>
+
+  <rect x="90" y="780" width="430" height="225" rx="18" fill="#ffffff" stroke="#7ba3d6" stroke-width="2.5"/>
+  <text x="126" y="840" font-size="34" font-weight="700" fill="#1a2233">abonado2</text>
+  <text x="126" y="880" font-size="24" fill="#6b7280">MikroTik CHR · plan 768k</text>
+  <text x="126" y="934" font-size="24" fill="#1a2233">ether2 + VLAN 100</text>
+  <text x="126" y="973" font-size="24" fill="#1a2233">IP: la asigna el router</text>
+
+  <text x="76" y="1090" font-size="21" fill="#5b6472">Generan tráfico solos, cada 2 y 3 minutos.</text>
+
+  <!-- abonados → router -->
+  <path d="M520,552 H650 V650 H770" fill="none" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+  <path d="M520,892 H650 V800 H770" fill="none" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+
+  <!-- ===================== ROUTER ===================== -->
+  <rect x="770" y="455" width="530" height="560" rx="22" fill="#fff4e6" stroke="#e8923a" stroke-width="4"/>
+  <text x="1035" y="535" font-size="40" font-weight="700" fill="#1a2233" text-anchor="middle">isp-router</text>
+  <text x="1035" y="580" font-size="24" fill="#6b7280" text-anchor="middle">MikroTik CHR · RouterOS 7.20.4</text>
+  <line x1="806" y1="612" x2="1264" y2="612" stroke="#f0c592" stroke-width="2"/>
+  <text x="806" y="662" font-size="25" fill="#1a2233"><tspan font-weight="700">ether1</tspan> · gestión</text>
+  <text x="806" y="708" font-size="25" fill="#1a2233"><tspan font-weight="700">ether2</tspan> + VLAN 100 → acceso</text>
+  <text x="836" y="744" font-size="22" fill="#5b6472">local-address 100.64.1.1</text>
+  <text x="806" y="790" font-size="25" fill="#1a2233"><tspan font-weight="700">ether3</tspan> · 10.10.50.1 → servicios</text>
+  <line x1="806" y1="824" x2="1264" y2="824" stroke="#f0c592" stroke-width="2"/>
+  <text x="1035" y="870" font-size="26" font-weight="700" fill="#b8621b" text-anchor="middle">Servidor PPPoE</text>
+  <text x="1035" y="910" font-size="26" font-weight="700" fill="#b8621b" text-anchor="middle">Cliente RADIUS</text>
+  <text x="1035" y="946" font-size="21" fill="#5b6472" text-anchor="middle">acepta corte y cambio de plan (3799)</text>
+  <text x="1035" y="978" font-size="21" fill="#5b6472" text-anchor="middle">toma la hora de isp-servicios (NTP)</text>
+
+  <!-- ===================== RED DE SERVICIOS ===================== -->
+  <rect x="1500" y="200" width="860" height="940" rx="28" fill="#eaf6ee" stroke="#8fcea1" stroke-width="2.5"/>
+  <text x="1536" y="262" font-size="28" font-weight="700" fill="#1e7a3c">RED DE SERVICIOS</text>
+  <text x="1536" y="304" font-size="24" fill="#2c3b55">red interna isp-servicios · 10.10.50.0/24</text>
+
+  <!-- ===== VM isp-servicios ===== -->
+  <rect x="1536" y="330" width="788" height="290" rx="20" fill="#ffffff" stroke="#7fc393" stroke-width="2.5"/>
+  <text x="1570" y="384" font-size="32" font-weight="700" fill="#1a2233">isp-servicios</text>
+  <text x="2296" y="382" font-size="22" fill="#5b6472" text-anchor="end">10.10.50.10</text>
+  <text x="1570" y="418" font-size="21" fill="#5b6472">Debian 12 + Docker · lo que hace funcionar al ISP</text>
+
+  <rect x="1566" y="440" width="240" height="160" rx="14" fill="#eef8f0" stroke="#7fc393" stroke-width="2.5"/>
+  <text x="1686" y="480" font-size="25" font-weight="700" fill="#1a2233" text-anchor="middle">FreeRADIUS</text>
+  <text x="1686" y="510" font-size="19" fill="#5b6472" text-anchor="middle">Autentica y</text>
+  <text x="1686" y="534" font-size="19" fill="#5b6472" text-anchor="middle">registra el uso</text>
+  <text x="1686" y="578" font-size="18" fill="#1e7a3c" text-anchor="middle">1812 · 1813 udp</text>
+
+  <line x1="1806" y1="520" x2="1848" y2="520" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+  <text x="1827" y="506" font-size="15" fill="#5b6472" text-anchor="middle">SQL</text>
+
+  <rect x="1848" y="440" width="240" height="160" rx="14" fill="#eef8f0" stroke="#7fc393" stroke-width="2.5"/>
+  <text x="1968" y="480" font-size="25" font-weight="700" fill="#1a2233" text-anchor="middle">PostgreSQL</text>
+  <text x="1968" y="510" font-size="19" fill="#5b6472" text-anchor="middle">Abonados, planes</text>
+  <text x="1968" y="534" font-size="19" fill="#5b6472" text-anchor="middle">y accounting</text>
+  <text x="1968" y="578" font-size="18" fill="#1e7a3c" text-anchor="middle">5432 tcp</text>
+
+  <rect x="2112" y="440" width="186" height="74" rx="14" fill="#ffffff" stroke="#8a94a6" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="2205" y="470" font-size="22" font-weight="700" fill="#1a2233" text-anchor="middle">chrony</text>
+  <text x="2205" y="497" font-size="16" fill="#1e7a3c" text-anchor="middle">hora · 123 udp</text>
+  <rect x="2112" y="526" width="186" height="74" rx="14" fill="#eef8f0" stroke="#7fc393" stroke-width="2.5"/>
+  <text x="2205" y="556" font-size="19" font-weight="700" fill="#1a2233" text-anchor="middle">node-exporter</text>
+  <text x="2205" y="583" font-size="16" fill="#1e7a3c" text-anchor="middle">9100 tcp</text>
+
+  <!-- ===== VM isp-monitoreo ===== -->
+  <rect x="1536" y="686" width="788" height="430" rx="20" fill="#ffffff" stroke="#8a94a6" stroke-width="2.5"/>
+  <text x="1570" y="740" font-size="32" font-weight="700" fill="#1a2233">isp-monitoreo</text>
+  <text x="2296" y="738" font-size="22" fill="#5b6472" text-anchor="end">10.10.50.20</text>
+  <text x="1570" y="774" font-size="21" fill="#5b6472">Debian 12 + Docker · lo que lo mira. Si la otra VM se cae, esta sigue</text>
+
+  <rect x="1566" y="796" width="158" height="80" rx="14" fill="#f6f8fb" stroke="#8a94a6" stroke-width="2.5"/>
+  <text x="1645" y="829" font-size="19" font-weight="700" fill="#1a2233" text-anchor="middle">snmp-exporter</text>
+  <text x="1645" y="856" font-size="15" fill="#5b6472" text-anchor="middle">pregunta al router</text>
+  <rect x="1738" y="796" width="158" height="80" rx="14" fill="#f6f8fb" stroke="#8a94a6" stroke-width="2.5"/>
+  <text x="1817" y="829" font-size="19" font-weight="700" fill="#1a2233" text-anchor="middle">node-exporter</text>
+  <text x="1817" y="856" font-size="15" fill="#5b6472" text-anchor="middle">mide este servidor</text>
+
+  <rect x="1566" y="892" width="330" height="80" rx="14" fill="#f6f8fb" stroke="#8a94a6" stroke-width="2.5"/>
+  <text x="1731" y="926" font-size="23" font-weight="700" fill="#1a2233" text-anchor="middle">Alloy</text>
+  <text x="1731" y="954" font-size="18" fill="#5b6472" text-anchor="middle">recibe los logs · 1514 · 1515 udp</text>
+
+  <line x1="1944" y1="836" x2="1896" y2="836" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+  <line x1="1896" y1="932" x2="1944" y2="932" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+
+  <rect x="1944" y="796" width="354" height="80" rx="14" fill="#f6f8fb" stroke="#8a94a6" stroke-width="2.5"/>
+  <text x="2121" y="830" font-size="23" font-weight="700" fill="#1a2233" text-anchor="middle">Prometheus</text>
+  <text x="2121" y="858" font-size="18" fill="#5b6472" text-anchor="middle">pregunta a los exportadores y guarda</text>
+
+  <rect x="1944" y="892" width="354" height="80" rx="14" fill="#f6f8fb" stroke="#8a94a6" stroke-width="2.5"/>
+  <text x="2121" y="926" font-size="23" font-weight="700" fill="#1a2233" text-anchor="middle">Loki</text>
+  <text x="2121" y="954" font-size="18" fill="#5b6472" text-anchor="middle">guarda los logs</text>
+
+  <rect x="1566" y="992" width="732" height="104" rx="14" fill="#e8f1fd" stroke="#3b6fd6" stroke-width="3.5"/>
+  <text x="1600" y="1036" font-size="28" font-weight="700" fill="#1a2233">Grafana</text>
+  <text x="2266" y="1034" font-size="19" fill="#2456b8" text-anchor="end">3000 tcp</text>
+  <text x="1600" y="1070" font-size="20" fill="#5b6472">El tablero. Lee de Prometheus, de Loki y de la base</text>
+
+  <!-- entre las dos VMs -->
+  <line x1="1686" y1="620" x2="1686" y2="686" stroke="#4b5563" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#flecha)"/>
+  <text x="1700" y="660" font-size="17" fill="#5b6472">logs del RADIUS · 1515</text>
+  <line x1="1968" y1="686" x2="1968" y2="620" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+  <text x="1982" y="660" font-size="17" fill="#5b6472">lee la base · solo vistas</text>
+  <line x1="2205" y1="686" x2="2205" y2="620" stroke="#4b5563" stroke-width="3" marker-end="url(#flecha)"/>
+  <text x="2217" y="660" font-size="17" fill="#5b6472">métricas · 9100</text>
+
+  <!-- ===================== router ↔ las dos VMs (va después de los recuadros para que las flechas queden encima) ===== -->
+  <line x1="1300" y1="500" x2="1536" y2="500" stroke="#4b5563" stroke-width="3" marker-start="url(#flecha)" marker-end="url(#flecha)"/>
+  <text x="1400" y="480" font-size="24" font-weight="700" fill="#1a2233" text-anchor="middle">RADIUS</text>
+  <text x="1400" y="528" font-size="19" fill="#5b6472" text-anchor="middle">1812 · 1813 · 3799</text>
+
+  <line x1="1300" y1="590" x2="1536" y2="590" stroke="#4b5563" stroke-width="3" stroke-dasharray="3 7" marker-end="url(#flecha)"/>
+  <text x="1400" y="574" font-size="22" font-weight="700" fill="#1a2233" text-anchor="middle">NTP · 123</text>
+  <text x="1400" y="616" font-size="18" fill="#5b6472" text-anchor="middle">pide la hora</text>
+
+  <line x1="1536" y1="820" x2="1300" y2="820" stroke="#4b5563" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#flecha)"/>
+  <text x="1400" y="802" font-size="22" font-weight="700" fill="#1a2233" text-anchor="middle">SNMP · 161</text>
+  <text x="1400" y="846" font-size="17" fill="#5b6472" text-anchor="middle">el monitoreo pregunta</text>
+
+  <line x1="1300" y1="930" x2="1536" y2="930" stroke="#4b5563" stroke-width="3" stroke-dasharray="10 7" marker-end="url(#flecha)"/>
+  <text x="1400" y="912" font-size="22" font-weight="700" fill="#1a2233" text-anchor="middle">syslog · 1514</text>
+  <text x="1400" y="956" font-size="18" fill="#5b6472" text-anchor="middle">el router manda</text>
+
+  <!-- ===================== NOTEBOOK ===================== -->
+  <line x1="1035" y1="1015" x2="1035" y2="1200" stroke="#6b7280" stroke-width="2.5" stroke-dasharray="7 7"/>
+  <text x="1055" y="1176" font-size="22" fill="#5b6472">ether1 · gestión</text>
+  <line x1="1930" y1="1116" x2="1930" y2="1200" stroke="#6b7280" stroke-width="2.5" stroke-dasharray="7 7"/>
+  <text x="1950" y="1176" font-size="22" fill="#5b6472">adaptador NAT</text>
+
+  <rect x="40" y="1200" width="2320" height="280" rx="28" fill="#f3f4f6" stroke="#b9bec7" stroke-width="2.5"/>
+  <text x="86" y="1262" font-size="30" font-weight="700" fill="#1a2233">Notebook · VirtualBox y Vagrant</text>
+
+  <text x="86" y="1322" font-size="25" font-weight="700" fill="#1a2233">Red de gestión (solo-anfitrión)</text>
+  <text x="86" y="1362" font-size="23" fill="#4b5563">Para entrar a los MikroTik con WinBox.</text>
+  <text x="86" y="1396" font-size="23" fill="#4b5563">La usan los tres CHR en su ether1.</text>
+  <text x="86" y="1446" font-size="21" fill="#8a909b">No es parte del ISP simulado: es nuestra puerta de entrada a las máquinas.</text>
+
+  <text x="1240" y="1322" font-size="25" font-weight="700" fill="#1a2233">Adaptador NAT de las dos VMs Debian</text>
+  <text x="1240" y="1362" font-size="23" fill="#4b5563">Baja las imágenes de Docker y toma la hora de internet.</text>
+  <text x="1240" y="1396" font-size="23" fill="#4b5563">Grafana se abre en el navegador: http://localhost:3000</text>
+  <text x="1240" y="1446" font-size="21" fill="#8a909b">Los abonados nunca ven a los servicios: el router les corta el paso.</text>
+</svg>
