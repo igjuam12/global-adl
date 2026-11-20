@@ -1,0 +1,69 @@
+# ==============================================================================
+# sql - el módulo que conecta FreeRADIUS con PostgreSQL
+# Parte 2 (FreeRADIUS)
+#
+# Con este módulo activo, FreeRADIUS:
+#   - al autorizar, busca al abonado en radcheck y su plan en radusergroup,
+#     radgroupcheck y radgroupreply;
+#   - con cada aviso de accounting, inserta o actualiza una fila de radacct;
+#     y cuando el router avisa que se reinició, cierra las que tenía abiertas;
+#   - después de cada intento, anota el resultado en radpostauth.
+# No hace falta tocar nada más: la configuración de fábrica ya llama a "sql"
+# en esos tres momentos si el módulo está activado.
+# ==============================================================================
+sql {
+	# Qué motor es y con qué "driver" hablarle
+	dialect = "postgresql"
+	driver = "rlm_sql_${dialect}"
+
+	postgresql {
+		# Se presenta con su nombre: aparece en la lista de conexiones de la base
+		send_application_name = yes
+	}
+
+	# Dónde está la base. "postgres" es el nombre del servicio en el compose:
+	# adentro de Docker los contenedores se encuentran por nombre, no por IP.
+	server = "postgres"
+	port = 5432
+	radius_db = "radius"
+
+	# Con qué usuario entra. La clave viene de una variable de entorno.
+	login = "radius"
+	password = "$ENV{RADIUS_DB_PASSWORD}"
+
+	# Los nombres de las tablas (los del esquema oficial)
+	acct_table1 = "radacct"
+	acct_table2 = "radacct"
+	postauth_table = "radpostauth"
+	authcheck_table = "radcheck"
+	groupcheck_table = "radgroupcheck"
+	authreply_table = "radreply"
+	groupreply_table = "radgroupreply"
+	usergroup_table = "radusergroup"
+	group_attribute = "SQL-Group"
+
+	# Leer los grupos: de ahí salen el plan (la velocidad) y el bloqueo
+	read_groups = yes
+
+	# Los routers autorizados están en clients.conf, no en la tabla "nas".
+	# El nombre de la tabla igual tiene que figurar: las consultas oficiales lo
+	# referencian y sin esta línea FreeRADIUS no arranca.
+	read_clients = no
+	client_table = "nas"
+
+	# Conexiones que mantiene abiertas con la base, para no abrir una por pedido
+	pool {
+		start = 2
+		min = 2
+		max = 8
+		spare = 4
+		uses = 0
+		retry_delay = 30
+		lifetime = 0
+		idle_timeout = 60
+		max_retries = 5
+	}
+
+	# Las consultas SQL en sí: usamos las oficiales, sin modificar
+	$INCLUDE ${modconfdir}/${.:name}/main/${dialect}/queries.conf
+}
