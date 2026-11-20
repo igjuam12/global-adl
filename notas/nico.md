@@ -88,6 +88,79 @@ En la imagen está en `/etc/freeradius`, y `/etc/raddb` es un enlace a esa carpe
 - Docker 29.10.0 y Compose v5.8.0, del repositorio oficial (clave en `/etc/apt/keyrings/docker.asc` y repo en `/etc/apt/sources.list.d/docker.sources`).
 - Repo clonado en `~/global-adl`.
 
+#### Comandos para armarla igual
+
+**1. En VirtualBox:** VM `isp-servicios`, Debian 64-bit, sin instalación desatendida, 2048 MB, 2 CPU, disco de 20 GB dinámico. Red: adaptador 1 **NAT**, adaptador 2 **red interna** `isp-servicios`. Regla para entrar por SSH (con la VM apagada, para que quede guardada):
+
+```powershell
+VBoxManage modifyvm isp-servicios --natpf1 "ssh,tcp,127.0.0.1,2222,,22"
+```
+
+**2. Instalador de Debian:** hostname `isp-servicios`, dominio vacío, interfaz principal `enp0s3`, particionado guiado en todo el disco. En "Selección de programas": sin entorno de escritorio ni GNOME, **con** servidor SSH y utilidades estándar. GRUB en `/dev/sda`.
+
+**3. Entrar desde Windows:**
+
+```powershell
+ssh -p 2222 nico@127.0.0.1
+```
+
+Si aparece `REMOTE HOST IDENTIFICATION HAS CHANGED!` (porque antes hubo otra VM en ese puerto): `ssh-keygen -R "[127.0.0.1]:2222"` y volver a conectar.
+
+**4. Como root (`su -`): IP fija, Docker y permisos.**
+
+```bash
+# IP fija hacia el router, sin gateway (la salida a internet es por el NAT)
+cat >> /etc/network/interfaces <<'EOF'
+
+# Red de servicios del ISP: hacia el router (10.10.50.1)
+allow-hotplug enp0s8
+iface enp0s8 inet static
+    address 10.10.50.10/24
+EOF
+ifup enp0s8
+
+# Clave del repositorio oficial de Docker
+apt update
+apt install ca-certificates curl git
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+# Repositorio de Docker (los $(...) completan la versión de Debian y el procesador)
+cat > /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+apt update
+
+# Docker y el plugin de compose
+apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Usar docker sin ser root (se aplica en un login nuevo)
+usermod -aG docker nico
+```
+
+**5. Salir de root y del SSH, volver a entrar como `nico` y verificar:**
+
+```bash
+ip -br a                 # enp0s8 UP con 10.10.50.10/24
+groups                   # tiene que aparecer docker
+docker --version
+docker compose version
+docker run hello-world   # "Hello from Docker!"
+```
+
+**6. Clonar el repo:**
+
+```bash
+cd ~
+git clone https://github.com/igjuam12/global-adl.git
+```
+
 ### Etapa 1: FreeRADIUS solo (exploración, todavía no está en el repo)
 
 Lo corrí en modo debug con un archivo `users` de prueba montado desde la VM:
