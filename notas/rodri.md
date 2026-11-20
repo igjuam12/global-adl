@@ -56,6 +56,15 @@ Los archivos que dejé en el repo y qué hace cada uno.
 | `abonados/export/` | Los `/export` reales de mis VMs, como respaldo |
 | `abonados/pruebas.md` | Mediciones de velocidad y tabla de pruebas de falla |
 
+### Pruebas de falla sin RADIUS (vie 20-nov)
+
+Las 4 dieron lo esperado. El detalle está en `abonados/pruebas.md`. Lo que aprendí de cada una:
+
+- **Contraseña incorrecta:** el router registra `authentication failed` en cada intento y el abonado reintenta solo, cada vez más espaciado. Con el RADIUS, esos intentos quedan en `radpostauth`.
+- **VLAN distinta:** el router no ve ningún intento, solo dice `peer is not responding`, igual que si se cortara el cable. Ningún log menciona la VLAN: se diagnostica comparando `/interface vlan print` en las dos puntas.
+- **Cambio de plan:** el plan nuevo recién se aplica cuando el abonado se reconecta. Por eso hace falta el Disconnect para aplicarlo en el momento.
+- **Router cargado:** la CPU pasó de 1 % a 17 % con los dos abonados descargando, y juntos sumaron ~975 kbps. Se confirmó que el límite es la licencia, no la CPU.
+
 ## 5. Qué falló y cómo lo diagnostiqué
 
 | Síntoma | Cómo lo diagnostiqué (comando o log) | Causa | Solución |

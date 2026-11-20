@@ -28,16 +28,23 @@ Planes (los de la base): abonado1 `plan-10m` = 256k subida / 512k bajada · abon
 
 ---
 
-## 2. Pruebas de falla que se pueden hacer sin RADIUS
+## 2. Pruebas de falla sin RADIUS (hechas el vie 20-nov, laboratorio de la parte 4)
 
-| Prueba | Cómo se provoca | Qué esperamos | Dónde mirar | Qué pasó |
-|---|---|---|---|---|
-| Contraseña incorrecta | En abonado1: `/interface pppoe-client set wan-pppoe password=mal` | El router rechaza la conexión; el abonado no recibe IP | `/log print` en el router y en el abonado; `/interface pppoe-client monitor wan-pppoe` | |
-| VLAN distinta | En abonado1: `/interface vlan set vlan-acceso vlan-id=200` | El abonado no encuentra el servidor ("searching…") y **ningún log menciona la VLAN** | `monitor` en el abonado; `/interface vlan print` en las dos puntas | |
-| Cambio de plan (local) | En el router: `/ppp secret set abonado1 profile=plan-50m` y reconectar abonado1 | La cola pasa a 512k/768k sin tocar el abonado | `/queue simple print`; bandwidth-test | |
-| Router cargado | bandwidth-test en los dos abonados a la vez | La CPU del router sube | `/system resource print` en el router; después, el tablero de Grafana | |
+| Prueba | Cómo se provoca | Qué esperamos | Dónde mirar | Qué pasó | ¿Coincide? |
+|---|---|---|---|---|---|
+| Contraseña incorrecta | En abonado1: `/interface pppoe-client set wan-pppoe password=mal` y reconectar | El router rechaza la conexión; el abonado no recibe IP | `/log print where topics~"ppp"` en el router y en el abonado; `monitor` en el abonado; `/ppp active print` | Router: `user abonado1 authentication failed` (tema `error`) en cada intento. Abonado: `failed to authenticate ourselves to peer`. En `/ppp active` quedó solo abonado2. El abonado reintenta solo: primero cada ~1 s y después cada 10 s | ✅ |
+| VLAN distinta | En abonado1: `/interface vlan set vlan-acceso vlan-id=200` | El abonado no encuentra el servidor y **ningún log menciona la VLAN** | `monitor` en el abonado; `/log print` en el router; `/interface vlan print` en las dos puntas | El router **no registró ningún intento** de abonado1 (los pedidos llegaban con otra etiqueta y no los veía). Solo apareció `terminating... - peer is not responding`, el mismo mensaje que si se cortara el cable o se apagara el equipo. La causa se encontró comparando `/interface vlan print`: 100 en el router, 200 en el abonado | ✅ |
+| Cambio de plan (local) | En el router: `/ppp secret set abonado1 profile=plan-50m` y reconectar abonado1 | La cola pasa a 512k/768k sin tocar el abonado | `/queue simple print`; bandwidth-test | Antes de reconectar, la cola **seguía en 256k/512k**: el plan no cambia en el medio de una conexión. Al reconectar pasó a 512k/768k y la bajada dio **735 kbps** (96 %) | ✅ |
+| Router cargado | bandwidth-test de bajada en los dos abonados a la vez | La CPU del router sube | `/system resource monitor` en el router; después, el tablero de Grafana | CPU **1 % en reposo → 17 % máximo**. Memoria libre ~51-57 MB. Bajadas: 406 + 569 ≈ **975 kbps** (otra vez el límite de 1 Mbps de la licencia) | ✅ |
 
-Después de cada prueba, **volver todo a como estaba** y verificar que los dos abonados reconectan.
+Después de cada prueba se volvió todo a como estaba y se verificó que los abonados reconectaran.
+
+**Observaciones:**
+- **Contraseña incorrecta:** con el RADIUS, cada uno de esos intentos fallidos va a quedar en la tabla `radpostauth`. Es lo primero que mira soporte cuando un cliente llama diciendo que no tiene internet.
+- **Accounting en el log del router:** al desconectarse, el router escribe una línea como `abonado1 logged out, 947 3816320 145240 3638 2212`. Los números parecen ser el tiempo conectado en segundos (947) y los bytes y paquetes que pasaron: la misma información que con el RADIUS se guarda en `radacct`.
+- **VLAN distinta:** es el error más difícil de diagnosticar. El router no puede distinguir "VLAN mal configurada" de "cable cortado" o "equipo apagado": la única forma de encontrarlo es comparar la configuración de las dos puntas.
+- **Cambio de plan:** el plan se aplica cuando el abonado se conecta. Con el RADIUS pasa lo mismo, y por eso existe el corte en el momento (Disconnect): el ISP corta al abonado, este se reconecta solo y entra con el plan nuevo.
+- **Router cargado:** parte de esa CPU la consume el propio servidor de bandwidth-test del router, que es una herramienta pesada. Con tráfico normal que pasa *a través* del router, la carga sería menor.
 
 ---
 
