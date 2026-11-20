@@ -40,6 +40,8 @@ Los abonados **nunca hablan con el RADIUS**: solo hablan con el router. Por eso 
 | `README.md` | Esta receta |
 | `abonado1.rsc` | Configuración de abonado1, comentada, lista para importar en un CHR nuevo |
 | `abonado2.rsc` | Igual, para abonado2 |
+| `trafico.rsc` | Tráfico automático, para que el tablero tenga movimiento. Se carga en los dos abonados, después del archivo de cada uno |
+| `moroso.rsc` | Una segunda conexión PPPoE con el usuario `moroso`, apagada. Se carga solo en abonado1, para mostrar el rechazo sin tocar la conexión normal |
 | `laboratorio/isp-router-prueba.rsc` | El router **de prueba** que usó la parte 4 (con usuarios locales). **No es el router oficial**: sirve como referencia para nacho |
 | `export/` | Los `/export` reales de las VMs, tal como quedaron. Respaldo y evidencia |
 | `pruebas.md` | Resultados de las pruebas hechas y tabla de pruebas de falla |
@@ -59,8 +61,9 @@ Esto es el "contrato" entre la parte 4 y la parte 3. Si el router cumple esto, l
 | local-address | `100.64.1.1` | La IP del router dentro de cada conexión PPPoE |
 | Usuarios | `abonado1`/`clave1` (512k/512k) · `abonado2`/`clave2` (768k/768k) · `moroso`/`clave3` (rechazado) | Primero como `/ppp secret`, después desde el RADIUS |
 | Servidor de bandwidth-test | `/tool bandwidth-server` encendido (viene así de fábrica) | Para las pruebas de tráfico |
+| Usuario de pruebas | `btest` / `BtestIsp2026` | El bandwidth-test pide un usuario del router. Con este no hace falta guardar la clave de `admin` en los abonados. Lo crea el router oficial (`mikrotik/01-base-pppoe.rsc`) |
 
-**Con RADIUS:** la velocidad la manda el RADIUS en el atributo `Mikrotik-Rate-Limit` con los valores `512k/512k` y `768k/768k` (esto es de la parte 2, nico). El router crea la cola igual que con un perfil local.
+**Con RADIUS:** la velocidad la manda el RADIUS en el atributo `Mikrotik-Rate-Limit` con los valores `512k/512k` y `768k/768k` (esto es de la parte 2, nico). El router crea la cola igual que con un perfil local. En la base, los planes son los grupos `plan-512k` y `plan-768k`.
 
 ---
 
@@ -182,6 +185,29 @@ El CHR trae de fábrica un cliente DHCP. No lo usamos: a la gestión se entra po
 
 **La velocidad no se configura en el abonado:** la decide el router (o el RADIUS). Igual que en un ISP real, el cliente no elige su plan.
 
+### Archivos extra
+
+Después del archivo del abonado se cargan igual, con `/import`:
+
+| Archivo | En cuál | Qué agrega |
+|---|---|---|
+| `trafico.rsc` | Los dos | Un script (`generar-trafico`) que baja datos del router 30 segundos y después le sube 20, con el usuario `btest`. Y un scheduler (`trafico`), el cron de RouterOS, que lo corre cada 2 minutos en abonado1 y cada 3 en abonado2 |
+| `moroso.rsc` | Solo abonado1 | El cliente PPPoE `wan-moroso` (usuario `moroso`, clave `clave3`), apagado y sin ruta por defecto |
+
+```
+/system scheduler disable trafico
+/system scheduler enable trafico
+```
+
+`disable` frena el tráfico automático y `enable` lo sigue. **Conviene frenarlo antes de las pruebas de falla:** con la cola del plan llena, hasta un `ping` al router se pierde y parece que el abonado no navega.
+
+```
+/interface pppoe-client enable wan-moroso
+/interface pppoe-client disable wan-moroso
+```
+
+`enable` hace que `moroso` intente entrar (y lo rechacen); `disable` lo deja apagado otra vez.
+
 ---
 
 ## 6. Verificar la conexión
@@ -250,7 +276,7 @@ Objetivo: comprobar que el router de nacho cumple el "contrato" de la sección 3
    /ppp secret add name=abonado1 password=clave1 service=pppoe profile=plan-512k
    /ppp secret add name=abonado2 password=clave2 service=pppoe profile=plan-768k
    ```
-   `/ppp secret add` crea un usuario PPP en el propio router; `profile` le asigna el plan. Los nombres de los perfiles tienen que ser los que use nacho.
+   `/ppp secret add` crea un usuario PPP en el propio router; `profile` le asigna el plan. Los nombres de los perfiles tienen que ser los que use nacho. El router oficial usa estos mismos (`plan-512k` y `plan-768k`), y `mikrotik/01-base-pppoe.rsc` ya crea los dos usuarios: con ese archivo importado, este paso no hace falta.
 3. Verificar como en la sección 6: los dos en `/ppp active print` y sus colas en `/queue simple print`.
 
 ✅ **Prueba de que anda:** los dos abonados conectados, con IP 100.64.1.x y la cola de su plan.
@@ -263,6 +289,7 @@ Esto lo configuran nacho (cliente RADIUS en el router) y nico (FreeRADIUS). **En
    ```
    /ppp secret remove [find]
    ```
+   En el router oficial esto lo hace `mikrotik/02-radius.rsc` al importarse.
 2. Forzar que los abonados se reconecten. En cada abonado:
    ```
    /interface pppoe-client disable wan-pppoe
@@ -278,7 +305,7 @@ Esto lo configuran nacho (cliente RADIUS en el router) y nico (FreeRADIUS). **En
 ✅ **Prueba de que anda:**
 - abonado1 y abonado2 conectan **sin** usuarios locales.
 - `/queue simple print` muestra 512k y 768k: **la velocidad la mandó el RADIUS**.
-- **moroso es rechazado** (se prueba con el cliente extra de moroso; ver Pendientes).
+- **moroso es rechazado** (se prueba con el cliente extra de `moroso.rsc`; ver "Archivos extra" en la sección 5).
 
 ### Etapa 3 · Abonados navegando (paso 4 del plan)
 
@@ -308,14 +335,14 @@ Tiene que decir `enabled: yes` y `authenticate: yes` (pide usuario y contraseña
 **En el abonado:**
 
 ```
-/tool bandwidth-test address=100.64.1.1 user=admin password=CLAVE_ADMIN_ROUTER protocol=tcp direction=receive duration=30s
+/tool bandwidth-test address=100.64.1.1 user=btest password=BtestIsp2026 protocol=tcp direction=receive duration=30s
 ```
 
 | Parte | Qué hace |
 |---|---|
 | `/tool bandwidth-test` | Arranca la prueba |
 | `address=100.64.1.1` | Contra el router, por adentro del túnel PPPoE |
-| `user=... password=...` | Credenciales **del router** (las pide el servidor de pruebas) |
+| `user=... password=...` | Credenciales **del router** (las pide el servidor de pruebas). En el router oficial es `btest`, un usuario creado solo para esto. El router de prueba de la parte 4 no lo tiene: ahí va `admin` con su clave |
 | `protocol=tcp` | TCP se adapta solo a la velocidad disponible; es lo más parecido a una descarga real |
 | `direction=receive` | El abonado **recibe**: mide la **bajada**. Con `transmit` mide la **subida** |
 | `duration=30s` | Dura 30 segundos |
@@ -335,6 +362,8 @@ Mientras corre, en WinBox del router, ventana **Queues**, se ve la cola del abon
 - **Por qué da 95-97 % y no 100 %:** el límite del plan cuenta todo lo que pasa por el cable, incluidos los encabezados de PPPoE, IP y TCP. El bandwidth-test mide solo los datos útiles.
 - **Por qué juntos no llegan:** la licencia gratuita del CHR limita a **1 Mbps por interfaz**. La `ether2` del router no puede mandar más de ~1 Mbps en total, así que los abonados se reparten ese "caño". Descartamos la CPU como causa porque no pasó del 16 %.
 - **Decisión del grupo (opción B):** mantener 512k/768k y explicar el límite en la presentación. Si en la demo los dos generan tráfico a la vez, en Grafana se va a ver que se reparten ~1 Mbps.
+
+**Con el router oficial y el usuario `btest`** (jue 19-nov, en la PC de nacho, pruebas de 20 segundos): 499 kbps de bajada en abonado1 y 748 kbps en abonado2. La subida no quedó bien medida en esa pasada.
 
 ---
 
@@ -387,11 +416,11 @@ Ver la sección 8.
 
 ## 10. Pendientes
 
-- [ ] **Usuario de pruebas en el router** (`btest`, grupo de solo lectura), para no guardar la clave de `admin` en los abonados. Hay que sumarlo a la configuración de nacho.
-- [ ] **Script de tráfico + `/system scheduler`** en cada abonado, para que el tablero tenga movimiento en la demo.
-- [ ] **Cliente PPPoE extra para `moroso`** en abonado1, apagado, para mostrar el rechazo sin tocar la conexión normal.
-- [ ] **Pruebas de falla** (ver `pruebas.md`).
-- [ ] **Alinear la subida de los planes con la base:** `postgres/init/02-datos-acordados.sql` (agus) manda `Mikrotik-Rate-Limit` = `256k/512k` (abonado1) y `512k/768k` (abonado2): subida/bajada. La bajada coincide con la de esta parte; la subida no (acá se probó 512k y 768k). Con el RADIUS, manda la base. Charlarlo en el grupo.
+- [x] **Usuario de pruebas en el router** (`btest`, grupo de solo lectura), para no guardar la clave de `admin` en los abonados. Hay que sumarlo a la configuración de nacho. **Hecho** en `mikrotik/01-base-pppoe.rsc`. No quedó en un grupo de solo lectura sino en uno propio, `solo-pruebas`, con lo mínimo que pide el bandwidth-test.
+- [x] **Script de tráfico + `/system scheduler`** en cada abonado, para que el tablero tenga movimiento en la demo. **Hecho:** `trafico.rsc`.
+- [x] **Cliente PPPoE extra para `moroso`** en abonado1, apagado, para mostrar el rechazo sin tocar la conexión normal. **Hecho:** `moroso.rsc`. Probado: FreeRADIUS lo rechazó y la conexión normal de abonado1 siguió conectada.
+- [ ] **Pruebas de falla** (ver `pruebas.md`). Hechas y anotadas las del sistema completo (tabla 3). De la tabla 2 quedaron sin probar con usuarios locales "contraseña incorrecta" y "cambio de plan"; las dos se probaron con RADIUS (tabla 3).
+- [x] **Alinear la subida de los planes con la base:** `postgres/init/02-datos-acordados.sql` (agus) manda `Mikrotik-Rate-Limit` = `256k/512k` (abonado1) y `512k/768k` (abonado2): subida/bajada. La bajada coincide con la de esta parte; la subida no (acá se probó 512k y 768k). Con el RADIUS, manda la base. Charlarlo en el grupo. **Hecho:** la base ahora manda `512k/512k` y `768k/768k`.
 
 ---
 
@@ -399,5 +428,5 @@ Ver la sección 8.
 
 - [x] Los dos abonados se conectan a la vez y reciben una IP 100.64.1.x.
 - [x] Se puede generar tráfico a demanda y se ve el límite de cada plan.
-- [ ] Las pruebas de falla están hechas y anotadas en `pruebas.md`.
+- [ ] Las pruebas de falla están hechas y anotadas en `pruebas.md`. (Dos de la tabla 2 se probaron solo con RADIUS; las del sistema completo están.)
 - [x] La configuración exportada está en esta carpeta y las notas están al día.
