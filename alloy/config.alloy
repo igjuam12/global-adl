@@ -3,43 +3,28 @@ logging {
   format = "logfmt"
 }
 
-// ---------- MÉTRICAS: SNMP al router ----------
-// snmp_exporter incorporado. "merge" suma nuestra comunidad (lab_v2)
-// a los módulos que Alloy ya trae, en vez de reemplazarlos.
-prometheus.exporter.snmp "router" {
-  config_file           = "/etc/alloy/snmp-auths.yml"
-  config_merge_strategy = "merge"
+// Alloy junta solo los LOGS. Las métricas van por otro camino: las pide
+// Prometheus a sus exportadores (ver prometheus/prometheus.yml).
 
-  target "isp_router" {
-    address = "10.10.50.1"
-    module  = "system,if_mib,hrDevice,hrStorage"
-    auth    = "lab_v2"
-  }
-}
-
-// Cada 15 s le pide los valores al exporter...
-prometheus.scrape "router" {
-  targets         = prometheus.exporter.snmp.router.targets
-  forward_to      = [prometheus.remote_write.local.receiver]
-  job_name        = "mikrotik-snmp"
-  scrape_interval = "15s"
-  scrape_timeout  = "10s"
-}
-
-// ...y los escribe en Prometheus.
-prometheus.remote_write "local" {
-  endpoint {
-    url = "http://prometheus:9090/api/v1/write"
-  }
-}
-
-// ---------- LOGS: syslog del router ----------
+// ---------- LOGS: las dos puntas de la conversación RADIUS ----------
+// Cuando algo falla hay que mirar el log del router y el del RADIUS. Los dos
+// entran por la misma puerta (syslog) y quedan juntos en Loki, cada uno con
+// su etiqueta "job".
 loki.source.syslog "router" {
+  // El router manda sus logs acá (mikrotik/03-monitoreo.rsc)
   listener {
     address       = "0.0.0.0:1514"
     protocol      = "udp"
     syslog_format = "rfc3164"
     labels        = { job = "mikrotik-syslog" }
+  }
+  // Docker manda acá, desde isp-servicios, lo que escribe el contenedor de
+  // FreeRADIUS (ver el bloque "logging" de ese servicio en docker-compose.yml).
+  listener {
+    address       = "0.0.0.0:1515"
+    protocol      = "udp"
+    syslog_format = "rfc3164"
+    labels        = { job = "freeradius" }
   }
   relabel_rules = loki.relabel.syslog.rules
   forward_to    = [loki.write.local.receiver]

@@ -16,11 +16,13 @@ datasources:
     url: http://loki:3100
     editable: false
 
-  # Hoy va a fallar el "Save & test": PostgreSQL todavía no está en este compose.
+  # La base está en la otra VM (isp-servicios). Entra con grafana_ro, que solo
+  # puede leer las cuatro vistas del tablero, y solo desde esta VM
+  # (postgres/init/04-roles-y-permisos.sh y postgres/pg_hba.conf).
   - name: RADIUS-PostgreSQL
     uid: ds-radius
     type: postgres
-    url: postgres:5432
+    url: 10.10.50.10:5432
     user: grafana_ro
     secureJsonData:
       password: $GRAFANA_DB_PASSWORD

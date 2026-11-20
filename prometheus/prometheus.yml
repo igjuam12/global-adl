@@ -1,9 +1,37 @@
+# A quién le pide métricas Prometheus, y cada cuánto.
+# El modelo es siempre el mismo: Prometheus pregunta y un exportador contesta.
 global:
   scrape_interval: 15s
 
 scrape_configs:
-  # Prometheus se mide a sí mismo. El router NO se consulta acá:
-  # sus métricas las empuja Alloy por escritura remota.
+  # Prometheus se mide a sí mismo.
   - job_name: prometheus
     static_configs:
       - targets: ["localhost:9090"]
+
+  # El router. Prometheus no habla SNMP: le pide las métricas a snmp-exporter,
+  # y es el exportador el que le pregunta al router (target) y traduce.
+  #   module   qué tablas SNMP leer: datos generales, interfaces, CPU y memoria
+  #   auth     con qué comunidad (está en snmp-auths.yml)
+  - job_name: router
+    scrape_timeout: 10s
+    metrics_path: /snmp
+    params:
+      target: ["10.10.50.1"]
+      module: ["system,if_mib,hrDevice,hrStorage"]
+      auth: ["lab_v2"]
+    static_configs:
+      - targets: ["snmp-exporter:9116"]
+        labels:
+          instance: isp-router
+
+  # Los dos servidores Debian, cada uno con su node-exporter. Si uno no contesta,
+  # la métrica "up" de ese servidor pasa a 0: así el tablero sabe que se cayó.
+  - job_name: servidores
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          instance: isp-monitoreo
+      - targets: ["10.10.50.10:9100"]
+        labels:
+          instance: isp-servicios

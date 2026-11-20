@@ -1,0 +1,6 @@
+# Comunidad SNMP del laboratorio, para snmp-exporter. Tiene que ser la misma que crea el router en
+# mikrotik/03-monitoreo.rsc, que además solo la acepta desde 10.10.50.20.
+auths:
+  lab_v2:
+    community: lab-monitoreo
+    version: 2

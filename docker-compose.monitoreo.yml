@@ -1,0 +1,139 @@
+name: isp-monitoreo
+
+# ==============================================================================
+# Los contenedores de isp-monitoreo (10.10.50.20): lo que mira al ISP.
+#
+# Métricas (Prometheus pregunta, los exportadores contestan):
+#   prometheus      cada 15 s les pide las métricas a los exportadores y las guarda
+#   snmp-exporter   intermediario del router: le pregunta por SNMP y traduce
+#   node-exporter   CPU y memoria de esta misma VM (hay otro igual en isp-servicios)
+# Logs (los equipos mandan, el recolector recibe):
+#   alloy           recibe el syslog del router y el de FreeRADIUS
+#   loki            guarda los logs
+# Y para verlo todo:
+#   grafana         el tablero
+#
+# Está en otra VM a propósito: si se cae isp-servicios (la base y el RADIUS),
+# el tablero sigue vivo y lo muestra. Vagrant sube este archivo a la VM con el
+# nombre docker-compose.yml.
+#
+# Hacia afuera solo se publica:
+#   1514/udp   syslog del router, en la IP de la red de servicios
+#   1515/udp   logs de FreeRADIUS, que manda Docker desde isp-servicios
+#   3000/tcp   Grafana (nosotros, desde el navegador)
+# Prometheus y Loki no se publican a la red.
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # PARTE 5: Alloy (recolector de logs: syslog del router y de FreeRADIUS)
+  # Las métricas no pasan por acá: las junta Prometheus con sus exportadores.
+  # ============================================================================
+  alloy:
+    image: grafana/alloy:v1.21.0
+    container_name: isp-alloy
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    depends_on:
+      - loki
+    ports:
+      - "10.10.50.20:1514:1514/udp"   # syslog que manda el router
+      - "10.10.50.20:1515:1515/udp"   # logs de FreeRADIUS, que manda Docker desde isp-servicios
+      - "${GESTION_IP:-127.0.0.1}:12345:12345"   # interfaz web de Alloy (diagnóstico)
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloydata:/var/lib/alloy/data
+
+  # ============================================================================
+  # PARTE 5: el exportador SNMP, intermediario entre Prometheus y el router.
+  # Prometheus no habla SNMP y el router no habla el idioma de Prometheus: este
+  # contenedor recibe el pedido de Prometheus, le pregunta al router por SNMP
+  # (161/udp) y devuelve la respuesta traducida. No publica ningún puerto.
+  # ============================================================================
+  snmp-exporter:
+    image: prom/snmp-exporter:v0.29.0
+    container_name: isp-snmp-exporter
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/snmp_exporter/snmp.yml          # qué preguntar: los módulos de fábrica
+      - --config.file=/etc/snmp_exporter/snmp-auths.yml    # con qué comunidad: la nuestra
+    volumes:
+      - ./prometheus/snmp-auths.yml:/etc/snmp_exporter/snmp-auths.yml:ro
+
+  # ============================================================================
+  # PARTE 5: el exportador del servidor. Publica CPU, memoria y carga de esta VM
+  # para que Prometheus las lea. Solo mira /proc y /sys, de solo lectura.
+  # ============================================================================
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: isp-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+
+  # ============================================================================
+  # PARTE 5: Prometheus. Cada 15 segundos les pide las métricas a los
+  # exportadores (prometheus/prometheus.yml dice a cuáles) y las guarda.
+  # ============================================================================
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: isp-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    ports:
+      - "${GESTION_IP:-127.0.0.1}:9090:9090"   # solo diagnóstico, no se publica a la red de servicios
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+
+  # ============================================================================
+  # PARTE 5: Loki (logs). Sin puerto publicado: solo lo usan Alloy (escribe) y
+  # Grafana (lee) por la red interna de Docker.
+  # ============================================================================
+  loki:
+    image: grafana/loki:3.7.0
+    container_name: isp-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - lokidata:/loki
+
+  # ============================================================================
+  # PARTE 1 y 5: Grafana (tablero del ISP)
+  # ============================================================================
+  grafana:
+    image: grafana/grafana:13.2.1
+    container_name: isp-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Con esta clave entra a la base de isp-servicios como grafana_ro
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  alloydata:
+  promdata:
+  lokidata:
+  grafanadata:
