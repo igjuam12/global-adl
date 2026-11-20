@@ -61,6 +61,8 @@ En la imagen está en `/etc/freeradius`, y `/etc/raddb` es un enlace a esa carpe
 | Por dónde empezar | Conectar primero la base de Agus · **FreeRADIUS solo, con usuarios en archivo** | Prefiero entender FreeRADIUS sin depender de otra parte, y sumar la base después |
 | Versión de la imagen | `latest-3.2` · **`3.2.10`** · `3.2.10-alpine` | `latest-3.2` cambia con el tiempo y cada uno podría integrar con otra versión. Alpine es más liviana pero trae menos herramientas para diagnosticar (sin `bash`). |
 | Cómo dar de alta al router | `clients.conf` · **tabla `nas` de la base** | `clients.conf` duplicaría el router y el secreto, que Agus ya cargó en la base, y podrían quedar distintos |
+| Cómo armar `freeradius/sql` | **Copiar el original de la imagen y cambiar las líneas necesarias** · escribir uno mínimo | El mínimo deja valores por defecto implícitos que habría que conocer. Copiando el original quedan todas las opciones oficiales; marqué cada cambio con `# CAMBIO:` para encontrarlos con `grep CAMBIO`. |
+| Contraseña de la base en `freeradius/sql` | **Escrita en el archivo** · leída del `.env` con `$ENV{RADIUS_DB_PASSWORD}` | Es un proyecto de laboratorio y la contraseña ya está en `.env.example`. Riesgo asumido: queda en dos lugares; si alguien la cambia en su `.env`, FreeRADIUS no conecta. Por eso el comentario de esa línea dice de dónde sale. |
 | Logs de FreeRADIUS | **Modo debug (`command: -X`)** · modo normal y `-X` solo al diagnosticar | En modo normal `docker compose logs` sale vacío, y para diagnosticar habría que frenar y relanzar el contenedor a mano |
 
 ## 3. Qué elegí y por qué
@@ -204,6 +206,38 @@ moroso Cleartext-Password := "clave3", Auth-Type := Reject
 - `docker exec isp-freeradius radtest pepe clave123 127.0.0.1 0 testing123` → Reject, como se esperaba: todavía usa el `users` de fábrica y no está conectado a la base.
 - Los `volumes` quedan comentados hasta crear los archivos de `freeradius/` en la etapa 2.
 
+### Etapa 2: FreeRADIUS lee de PostgreSQL (módulo `sql`)
+
+El servidor `default` ya trae `-sql` en `authorize`, `accounting`, `post-auth` y `Post-Auth-Type REJECT`. El guion significa "usalo si está activado". Por eso **no hubo que tocar el servidor**: alcanzó con activar el módulo.
+
+- `freeradius/sql`: copia del original de la imagen (`docker cp isp-freeradius:/etc/freeradius/mods-available/sql freeradius/sql`) con 8 cambios. Se ven con `grep -n CAMBIO freeradius/sql`:
+  - `dialect = "postgresql"`: el "idioma" SQL; elige las consultas de `mods-config/sql/main/postgresql/queries.conf`.
+  - `driver = "rlm_sql_${dialect}"`: la biblioteca que conecta (el original traía `rlm_sql_null`, que no conecta a nada).
+  - `server = "postgres"`, `port = 5432`, `login = "radius"`, `password = …`: dónde está la base. `postgres` es el nombre del servicio en el compose; Docker lo resuelve en su red interna.
+  - `read_clients = yes`: carga los routers de la tabla `nas` (`client_table = "nas"` ya venía activo).
+- Compose: `./freeradius/sql:/etc/raddb/mods-enabled/sql:ro`. Montarlo en `mods-enabled` es lo que activa el módulo.
+
+Lo que mostró el log al arrancar (`docker compose logs freeradius`):
+
+- Las consultas que usa: `radcheck` (contraseña), `radusergroup` (grupo o plan), `radgroupcheck` (condiciones del grupo, como el `Auth-Type := Reject` de morosos) y `radgroupreply` (atributos del plan).
+- Se conecta a `host='postgres' dbname='radius' user='radius'` y abre un *pool* de conexiones.
+- Cargó 4 de las 5 filas de `nas`. La de `127.0.0.1` dio `Failed to add duplicate client localhost-test`: ya existía el `localhost` de `clients.conf` (cargado antes). **Gana el primero que se carga**, el duplicado se descarta con un aviso y el servidor sigue arrancando. Por eso, en las pruebas locales, el secreto sigue siendo `testing123`.
+- ⚠️ En modo `-X`, el log muestra la **contraseña de la base en texto claro**. Otro motivo para no usar `-X` en producción.
+
+| Prueba (`radtest … 127.0.0.1 0 testing123`) | Resultado |
+| --- | --- |
+| `abonado1 clave1` | **Accept** + `Mikrotik-Rate-Limit = "256k/512k"`, `Framed-Protocol = PPP`, `Service-Type = Framed-User` (las 3 filas del grupo `plan-10m` en `radgroupreply`) |
+| `moroso clave3` (clave correcta) | Reject: el grupo `morosos` tiene `Auth-Type := Reject` en `radgroupcheck` |
+| `abonado1 otraclave` | Reject: no coincide con `radcheck` |
+
+Los 3 intentos quedaron en `radpostauth` (ids 7, 8 y 9; las filas 1 a 6 son datos sintéticos de Agus):
+
+```bash
+docker exec isp-postgres psql -U radius -d radius -c "SELECT id, username, reply, authdate FROM radpostauth ORDER BY id;"
+```
+
+La columna `authdate` se muestra en **UTC** (`+00`): `14:06` en la base eran las `11:06` en Argentina. La hora se guarda bien; para Grafana hay que mostrarla en `America/Argentina/Buenos_Aires` (sección 14 del plan: "datos corridos 3 horas").
+
 ## 5. Qué falló y cómo lo diagnostiqué
 
 | Síntoma | Cómo lo diagnostiqué (comando o log) | Causa | Solución |
@@ -213,6 +247,7 @@ moroso Cleartext-Password := "clave3", Auth-Type := Reject
 | `ping 10.10.50.1` → `Destination Host Unreachable` | El error lo genera la propia VM (`From 10.10.50.10`) | Nadie responde ARP: el router todavía no existe | Esperado. Va a ser la primera prueba cuando esté el router. |
 | Después de `exit`, se abrió `nano` diciendo "no es de escritura" | El prompt había vuelto a `nico` (`$`) | Había pegado `su -` y `nano …` juntos: la línea de nano quedó pendiente y se ejecutó como `nico` | Salir con Ctrl+X. El archivo estaba intacto. |
 | Al editar el compose dejé `# freeradius:` comentado (y una `S` suelta en un puerto) | Revisando el bloque antes de levantar, y con `docker compose config --quiet` | Sin la línea del servicio, las claves de abajo quedaban dentro del servicio `postgres` | Descomentar con 2 espacios, alineado con `postgres:`. Validar siempre con `docker compose config` antes de `up`. |
+| Al activar el `sql` en el compose dejé `# volumes:` comentado | Revisando el bloque antes de levantar | El `- ./freeradius/sql…` quedaba como un elemento más de la lista `ports` | Descomentar `volumes:` con 4 espacios, igual que `ports:` |
 | `docker compose logs freeradius` salía vacío | — | En modo normal, FreeRADIUS no loguea a la salida estándar | `command: -X` |
 | Agregué un usuario a `users` dentro del contenedor y seguía rechazándolo | El `-X` no mostraba `Matched entry` | FreeRADIUS lee la configuración solo al arrancar. Además, con `--rm`, reiniciar borraba el cambio. | Archivo en la VM montado con `-v` y reinicio del contenedor |
 
@@ -224,12 +259,14 @@ Qué respondió mal y cómo me di cuenta:
 
 1. **Alerta falsa sobre `/etc/raddb`.** Al ver `/etc/freeradius` en el log, la IA avisó que los montajes del compose (en `/etc/raddb/…`) no iban a funcionar. Lo verifiqué con `ls -ld /etc/raddb /etc/freeradius`: `/etc/raddb` es un enlace a `/etc/freeradius`, así que los montajes sí funcionan.
 2. **Chequeo de MAC con un dato viejo.** Me dijo que la MAC de `enp0s8` iba a terminar en `6c:f8:6d` (de mi captura) y no coincidió. Con `VBoxManage showvminfo` vimos que la VM tenía otras MAC porque yo la había recreado. La IA se basó en información que ya no era actual.
-3. **Coordinación innecesaria.** Me sugirió preguntarle al grupo quién armaba la VM isp-servicios, cuando ya habíamos acordado trabajar de forma independiente. Se lo marqué y lo corrigió: con los datos del plan, cada uno puede armar la suya.
+3. **Opinó sobre un archivo sin leerlo entero.** Me dijo que en la tabla `nas` Agus había cargado solo `10.10.50.0/24` (toda la red) y no `10.10.50.1`. Había mirado una sola línea con `grep`. Al leer `02-datos-acordados.sql` completo, vimos 5 filas, incluido `10.10.50.1`, y el log de FreeRADIUS lo confirmó (`Client "isp-router" (sql) added`).
+4. **Coordinación innecesaria.** Me sugirió preguntarle al grupo quién armaba la VM isp-servicios, cuando ya habíamos acordado trabajar de forma independiente. Se lo marqué y lo corrigió: con los datos del plan, cada uno puede armar la suya.
 
 ## Pendientes
 
 - [x] Decidir cómo dar de alta al router → tabla `nas`
 - [x] Bloque del `docker-compose.yml` con la imagen `3.2.10` y `-X`
-- [ ] Charlar con Agus al final: en `nas` cargó `10.10.50.0/24` (toda la red) en vez de `10.10.50.1`. Mínimo privilegio: solo el router debería poder preguntar. Primero ver con qué IP llegan los pedidos del router.
-- [ ] Etapa 2: módulo `sql` contra PostgreSQL (abonado1 Accept con su plan, moroso y clave incorrecta Reject, intentos en `radpostauth`)
+- [x] Etapa 2: módulo `sql` contra PostgreSQL (abonado1 Accept con su plan, moroso y clave incorrecta Reject, intentos en `radpostauth`)
+- [ ] Charlar con Agus al final: la tabla `nas` tiene, además de `10.10.50.1`, `10.10.50.0/24`, `127.0.0.1` y dos filas de solo-anfitrión (`192.168.56.x`). Mínimo privilegio: ¿hacen falta? Primero ver con qué IP llegan los pedidos del router.
+- [ ] Etapa 3, con el router de Nacho: accounting en `radacct` y Disconnect con `radclient`
 - [ ] Verificar la prueba "Secreto distinto": ¿el RADIUS ignora el pedido?

@@ -46,10 +46,11 @@ services:
     ports:
       - "10.10.50.10:1812:1812/udp"   # autenticación
       - "10.10.50.10:1813:1813/udp"   # accounting
-    # Se activan a medida que se crean los archivos en freeradius/ (etapa 2)
-    # volumes:
-    #   - ./freeradius/clients.conf:/etc/raddb/clients.conf:ro
-    #   - ./freeradius/sql:/etc/raddb/mods-enabled/sql:ro
+    # Montar el módulo en mods-enabled lo activa (el original de
+    # mods-available no se toca). clients.conf no se monta: los routers
+    # se leen de la tabla nas (read_clients = yes en freeradius/sql).
+    volumes:
+      - ./freeradius/sql:/etc/raddb/mods-enabled/sql:ro
 
   # ==============================================================================
   # PARTE 5: Telegraf (Recolección SNMP y Syslog) - (Se descomenta con Parte 5)
