@@ -40,7 +40,8 @@ Qué opciones había y por qué descarté cada una.
 
 - Abonados como **CHR clonados** de una base, con **MACs nuevas**, porque PPPoE distingue a cada abonado por su MAC.
 - **bandwidth-test contra el router**: es simple, no necesita nada más y muestra el plan de cada abonado.
-- **Planes 512k/768k (opción B, decisión del grupo):** por separado cada abonado llega a su plan; juntos se reparten ~1 Mbps, y lo explicamos con las mediciones.
+- **Planes de la base, opción B (decisión del grupo):** abonado1 `plan-10m` = 256k subida / 512k bajada y abonado2 `plan-50m` = 512k subida / 768k bajada. Por separado cada abonado llega a su plan; al bajar juntos se reparten ~1 Mbps, y lo explicamos con las mediciones.
+- **Perfiles del router con los mismos nombres y valores que la base:** con el RADIUS, la velocidad la decide la base. Si los perfiles locales fueran distintos, el abonado cambiaría de velocidad al pasar a RADIUS.
 - [Completar: por qué me pareció bien la opción B]
 
 ## 4. Qué hice
@@ -51,7 +52,7 @@ Los archivos que dejé en el repo y qué hace cada uno.
 | --- | --- |
 | `abonados/README.md` | Receta paso a paso: armar los abonados, qué necesitan del router y cómo integrarlos con el router real y el RADIUS. Cada comando explicado |
 | `abonados/abonado1.rsc`, `abonado2.rsc` | Configuración comentada de cada abonado, para importar en un CHR nuevo con `/import` |
-| `abonados/laboratorio/isp-router-prueba.rsc` | El router de prueba que usé, con usuarios locales. No es el router oficial (ese es de nacho) |
+| `abonados/laboratorio/isp-router-prueba.rsc` | El router de prueba que usé, con usuarios locales y los planes de la base. No es el router oficial (ese es de nacho) |
 | `abonados/export/` | Los `/export` reales de mis VMs, como respaldo |
 | `abonados/pruebas.md` | Mediciones de velocidad y tabla de pruebas de falla |
 
@@ -61,13 +62,7 @@ Los archivos que dejé en el repo y qué hace cada uno.
 | --- | --- | --- | --- |
 | Las placas aparecían como `ether2`-`ether4` en vez de `ether1`-`ether3` | `/interface ethernet print`, comparando las MAC con las de VirtualBox | La `chr-base` ya se había arrancado. RouterOS asocia cada nombre a una MAC; al clonar con MACs nuevas, les dio el siguiente nombre libre | Renombrar eligiendo cada placa por su MAC: `/interface ethernet set [find mac-address=...] name=ether1`. Además borré un cliente DHCP que apuntaba a la placa vieja (`*2` en el `/export`) |
 | `expected end of command` y después `already have interface with such name` | Leyendo los dos errores y `/interface pppoe-client print detail` | Pegué el comando del cliente PPPoE en dos partes. La primera mitad era válida y creó `wan-pppoe` sin contraseña y apagada | Completarla con `set` en lugar de repetir el `add` |
-| Los dos abonados juntos no llegan a su plan: 351k + 606k ≈ 957k, cuando los planes suman 1280k | bandwidth-test en los dos a la vez. Por separado daban 497k y 746k. CPU máxima 16 % | Límite de 1 Mbps por interfaz de la licencia gratuita del CHR. No era la CPU | Opción B: se mantienen los planes y se explica en la presentación |
+| Los dos abonados juntos no llegan a su plan al bajar: 351k + 606k ≈ 957k, cuando los planes suman 1280k | bandwidth-test en los dos a la vez. Por separado daban 497k y 746k. CPU máxima 16 % | Límite de 1 Mbps por interfaz de la licencia gratuita del CHR. No era la CPU | Opción B: se mantienen los planes y se explica en la presentación |
+| Mis planes no coincidían con los de la base: yo usaba `plan-512k` (512k/512k) y `plan-768k` (768k/768k); la base tiene `plan-10m` (256k/512k) y `plan-50m` (512k/768k) | Leyendo `postgres/init/02-datos-acordados.sql` y las notas de nico (`radtest` devuelve `Mikrotik-Rate-Limit = "256k/512k"`) | Cada parte eligió los valores por su lado y el plan de trabajo seguía diciendo 10M/50M | Alineé los perfiles con `/ppp profile set` (mismo nombre y valores que la base) y repetí solo las pruebas de subida: la bajada ya coincidía |
 
-## 6. Cómo usé la IA
 
-Qué le pregunté, qué respondió mal y cómo me di cuenta.
-
-- [Completar: qué le pregunté. Ej.: que me guíe paso a paso para crear las VMs y configurar PPPoE, explicando cada comando.]
-- [Completar: qué respondió mal o qué tuve que corregir. Ej.: arrancó con los planes de 10M/50M del plan de trabajo; con el límite de la licencia que averigüé, no se iba a ver la diferencia.]
-- [Completar: cómo me di cuenta. Ej.: midiendo con bandwidth-test y comparando con lo esperado.]
-- La IA anticipó que la licencia podía limitar las pruebas simultáneas; lo comprobamos con mediciones antes de creerlo.

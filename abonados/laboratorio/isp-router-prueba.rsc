@@ -27,19 +27,20 @@
 # Bolsa de IPs para los abonados
 /ip pool add name=pool-abonados ranges=100.64.1.10-100.64.1.100
 
-# Planes acordados por el grupo (opción B): 512k y 768k
+# Planes: mismos nombres y valores que los grupos de la base
+# (postgres/init/02-datos-acordados.sql), así la velocidad no cambia al pasar a RADIUS.
 # local-address = IP del router dentro de cada conexión PPPoE
 # remote-address = de dónde sale la IP del abonado
 # rate-limit = subida/bajada del abonado; crea una cola dinámica por abonado
-/ppp profile add name=plan-512k local-address=100.64.1.1 remote-address=pool-abonados rate-limit=512k/512k
-/ppp profile add name=plan-768k local-address=100.64.1.1 remote-address=pool-abonados rate-limit=768k/768k
+/ppp profile add name=plan-10m local-address=100.64.1.1 remote-address=pool-abonados rate-limit=256k/512k
+/ppp profile add name=plan-50m local-address=100.64.1.1 remote-address=pool-abonados rate-limit=512k/768k
 
 # Servidor PPPoE escuchando en la VLAN (no directo en ether2)
-/interface pppoe-server server add service-name=isp interface=vlan-acceso default-profile=plan-512k disabled=no
+/interface pppoe-server server add service-name=isp interface=vlan-acceso default-profile=plan-10m disabled=no
 
 # Usuarios LOCALES, solo mientras no hay RADIUS. Con el RADIUS real se borran.
-/ppp secret add name=abonado1 password=clave1 service=pppoe profile=plan-512k
-/ppp secret add name=abonado2 password=clave2 service=pppoe profile=plan-768k
+/ppp secret add name=abonado1 password=clave1 service=pppoe profile=plan-10m
+/ppp secret add name=abonado2 password=clave2 service=pppoe profile=plan-50m
 
 # El servidor de bandwidth-test viene encendido de fábrica
 # (/tool bandwidth-server: enabled=yes, authenticate=yes). No hace falta configurarlo.

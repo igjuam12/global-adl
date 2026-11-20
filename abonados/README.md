@@ -2,10 +2,10 @@
 
 **Responsable:** Rodri · **Notas:** [`../notas/rodri.md`](../notas/rodri.md)
 
-Receta de armado e integración. Para **nacho** (router) y el resto del grupo.
-RouterOS **7.20.4** · Planes acordados: **abonado1 512k/512k · abonado2 768k/768k** (opción B)
+Receta de armado e integración, para cualquiera del grupo que integre en su PC (y para nacho, que arma el router).
+RouterOS **7.20.4** · Planes (los de la base, `postgres/init/02-datos-acordados.sql`): **abonado1 `plan-10m` = 256k subida / 512k bajada · abonado2 `plan-50m` = 512k subida / 768k bajada**
 
-Esta receta explica cómo armar los dos abonados desde cero, qué tiene que tener el router para que se conecten, y cómo integrarlos con el router real paso a paso. Cada comando tiene su explicación, porque en la presentación nos pueden preguntar cualquier línea a cualquiera.
+Esta receta explica cómo armar los dos abonados desde cero, qué tiene que tener el router para que se conecten, y cómo integrarlos con el router oficial (el de `mikrotik/`) paso a paso. Cada comando tiene su explicación, porque en la presentación nos pueden preguntar cualquier línea a cualquiera.
 
 ---
 
@@ -17,7 +17,7 @@ Esta receta explica cómo armar los dos abonados desde cero, qué tiene que tene
 4. [Crear las VMs de los abonados](#4-crear-las-vms-de-los-abonados)
 5. [Configurar los abonados](#5-configurar-los-abonados)
 6. [Verificar la conexión](#6-verificar-la-conexión)
-7. [Integración con el router real](#7-integración-con-el-router-real)
+7. [Integración con el router oficial](#7-integración-con-el-router-oficial)
 8. [Pruebas de tráfico](#8-pruebas-de-tráfico)
 9. [Problemas que tuvimos y cómo se resolvieron](#9-problemas-que-tuvimos-y-cómo-se-resolvieron)
 10. [Pendientes](#10-pendientes)
@@ -40,7 +40,7 @@ Los abonados **nunca hablan con el RADIUS**: solo hablan con el router. Por eso 
 | `README.md` | Esta receta |
 | `abonado1.rsc` | Configuración de abonado1, comentada, lista para importar en un CHR nuevo |
 | `abonado2.rsc` | Igual, para abonado2 |
-| `laboratorio/isp-router-prueba.rsc` | El router **de prueba** que usó la parte 4 (con usuarios locales). **No es el router oficial**: sirve como referencia para nacho |
+| `laboratorio/isp-router-prueba.rsc` | El router **de prueba** que usó la parte 4 (con usuarios locales). **No es el router oficial** (ese está en `mikrotik/`): sirve para probar los abonados sin RADIUS y como referencia |
 | `export/` | Los `/export` reales de las VMs, tal como quedaron. Respaldo y evidencia |
 | `pruebas.md` | Resultados de las pruebas hechas y tabla de pruebas de falla |
 
@@ -57,10 +57,11 @@ Esto es el "contrato" entre la parte 4 y la parte 3. Si el router cumple esto, l
 | Servidor PPPoE | Escuchando **en la interfaz VLAN**, no directamente en `ether2` | Si escucha en `ether2`, no ve los paquetes etiquetados |
 | Pool | `100.64.1.10` a `100.64.1.100` | De acá salen las IPs de los abonados |
 | local-address | `100.64.1.1` | La IP del router dentro de cada conexión PPPoE |
-| Usuarios | `abonado1`/`clave1` (512k/512k) · `abonado2`/`clave2` (768k/768k) · `moroso`/`clave3` (rechazado) | Primero como `/ppp secret`, después desde el RADIUS |
+| Planes | `plan-10m` con `rate-limit=256k/512k` · `plan-50m` con `rate-limit=512k/768k` | Mismos nombres y valores que los grupos de la base. El formato es **subida/bajada del abonado**: abonado1 sube a 256k y baja a 512k |
+| Usuarios | `abonado1`/`clave1` (`plan-10m`) · `abonado2`/`clave2` (`plan-50m`) · `moroso`/`clave3` (rechazado) | Primero como `/ppp secret`, después desde el RADIUS |
 | Servidor de bandwidth-test | `/tool bandwidth-server` encendido (viene así de fábrica) | Para las pruebas de tráfico |
 
-**Con RADIUS:** la velocidad la manda el RADIUS en el atributo `Mikrotik-Rate-Limit` con los valores `512k/512k` y `768k/768k` (esto es de la parte 2, nico). El router crea la cola igual que con un perfil local.
+**Con RADIUS:** la velocidad la manda el RADIUS en el atributo `Mikrotik-Rate-Limit`, con los valores de la tabla `radgroupreply` de la base: `256k/512k` para el grupo `plan-10m` y `512k/768k` para `plan-50m` (nico lo comprobó con `radtest`). El router crea la cola igual que con un perfil local. Por eso los perfiles locales usan los mismos valores: así la velocidad no cambia al pasar de usuarios locales a RADIUS.
 
 ---
 
@@ -222,7 +223,7 @@ Ping al router por adentro del túnel PPPoE. Tienen que volver 4 de 4.
 ```
 
 - `/ppp active print`: quién está conectado ahora. `CALLER-ID` es la MAC de `ether2` del abonado; con RADIUS, esa MAC le llega al RADIUS y queda en el accounting.
-- `/queue simple print`: las colas de velocidad, creadas solas (flag **D** = dinámica): `<pppoe-abonado1>` con 512k/512k y `<pppoe-abonado2>` con 768k/768k.
+- `/queue simple print`: las colas de velocidad, creadas solas (flag **D** = dinámica): `<pppoe-abonado1>` con `max-limit=256k/512k` y `<pppoe-abonado2>` con `max-limit=512k/768k` (subida/bajada).
 
 Lo que obtuvimos en el laboratorio:
 
@@ -236,30 +237,33 @@ Las IPs empiezan desde el final del pool (.100, .99): RouterOS reparte así. No 
 
 ---
 
-## 7. Integración con el router real
+## 7. Integración con el router oficial
 
-Se hace **de a un cambio por vez**. Si algo falla, **mirar el log de las dos puntas antes de tocar nada** (`/log print` en el router y en el abonado).
+Según el plan de trabajo (sección 9), **cada uno integra en su propia PC**: clona el repo, arma las 4 VMs igual y conecta las piezas en el mismo orden. Esta sección es la parte de ese recorrido que toca a los abonados.
 
-### Etapa 1 · Abonados ↔ router de nacho, con usuarios locales
+Se hace **de a un cambio por vez**. Si algo falla, **mirar el log de las dos puntas antes de tocar nada** (`/log print` en el router y en el abonado). Si hay que corregir algo de otra parte, se le avisa a su responsable en vez de cambiarlo por cuenta propia.
 
-Objetivo: comprobar que el router de nacho cumple el "contrato" de la sección 3, sin RADIUS de por medio.
+### Etapa 1 · Abonados ↔ router oficial, con usuarios locales
 
-1. Arrancar el router de nacho y los dos abonados (configurados como en la sección 5).
-2. En el router, si todavía no los tiene, crear los usuarios locales:
+Objetivo: comprobar que el router oficial (`mikrotik/`) cumple el "contrato" de la sección 3, sin RADIUS de por medio.
+
+1. En tu VM `isp-router`, cargar la configuración oficial de `mikrotik/` (subirla por WinBox → **Files** y `/import file-name=...`).
+2. Arrancar los dos abonados (configurados como en la sección 5).
+3. Si el router todavía no los tiene, crear los usuarios locales:
    ```
-   /ppp secret add name=abonado1 password=clave1 service=pppoe profile=plan-512k
-   /ppp secret add name=abonado2 password=clave2 service=pppoe profile=plan-768k
+   /ppp secret add name=abonado1 password=clave1 service=pppoe profile=plan-10m
+   /ppp secret add name=abonado2 password=clave2 service=pppoe profile=plan-50m
    ```
-   `/ppp secret add` crea un usuario PPP en el propio router; `profile` le asigna el plan. Los nombres de los perfiles tienen que ser los que use nacho.
-3. Verificar como en la sección 6: los dos en `/ppp active print` y sus colas en `/queue simple print`.
+   `/ppp secret add` crea un usuario PPP en el propio router; `profile` le asigna el plan.
+4. Verificar como en la sección 6: los dos en `/ppp active print` y sus colas en `/queue simple print`.
 
 ✅ **Prueba de que anda:** los dos abonados conectados, con IP 100.64.1.x y la cola de su plan.
 
 ### Etapa 2 · Router ↔ RADIUS (paso 3 del plan de integración)
 
-Esto lo configuran nacho (cliente RADIUS en el router) y nico (FreeRADIUS). **En los abonados no se toca nada.**
+La configuración del cliente RADIUS en el router es de nacho y la de FreeRADIUS es de nico. **En los abonados no se toca nada.**
 
-1. Con el RADIUS ya respondiendo, nacho **borra los usuarios locales**, para estar seguros de que la respuesta viene del RADIUS:
+1. Con `isp-servicios` levantada y el RADIUS respondiendo, **borrar los usuarios locales** del router, para estar seguros de que la respuesta viene del RADIUS:
    ```
    /ppp secret remove [find]
    ```
@@ -277,15 +281,19 @@ Esto lo configuran nacho (cliente RADIUS en el router) y nico (FreeRADIUS). **En
 
 ✅ **Prueba de que anda:**
 - abonado1 y abonado2 conectan **sin** usuarios locales.
-- `/queue simple print` muestra 512k y 768k: **la velocidad la mandó el RADIUS**.
+- `/queue simple print` muestra `256k/512k` y `512k/768k`: **la velocidad la mandó el RADIUS**.
 - **moroso es rechazado** (se prueba con el cliente extra de moroso; ver Pendientes).
 
 ### Etapa 3 · Abonados navegando (paso 4 del plan)
 
 1. Generar tráfico desde los abonados (sección 8).
-2. Agus verifica que en la tabla `radacct` aparecen filas de abonado1 y abonado2 y que **se actualizan cada minuto** (interim-update).
+2. Mirar la tabla `radacct` en `isp-servicios`:
+   ```
+   docker exec isp-postgres psql -U radius -d radius -c "SELECT username, acctupdatetime, acctinputoctets, acctoutputoctets FROM radacct ORDER BY radacctid;"
+   ```
+   Muestra, por cada sesión, el usuario, la hora de la última actualización y los bytes que subió (`input`) y bajó (`output`). Ojo: la base trae **sesiones inventadas** para probar Grafana (`04-datos-prueba-sinteticos.sql`); las reales son las que se actualizan cada minuto.
 
-✅ **Prueba de que anda:** los contadores de bytes de `radacct` suben minuto a minuto mientras hay tráfico.
+✅ **Prueba de que anda:** las filas de abonado1 y abonado2 se actualizan **cada minuto** (interim-update) y sus contadores suben mientras hay tráfico.
 
 ### Etapa 4 · Pruebas de falla (paso 6 del plan)
 
@@ -327,14 +335,17 @@ Mientras corre, en WinBox del router, ventana **Queues**, se ve la cola del abon
 | Prueba | Plan | Medido |
 |---|---|---|
 | abonado1 bajada | 512k | 497 kbps (97 %) |
-| abonado1 subida | 512k | 487 kbps (95 %) |
+| abonado1 subida | 256k | *a repetir* (ver `pruebas.md`) |
 | abonado2 bajada | 768k | 746 kbps (97 %) |
-| abonado2 subida | 768k | 734 kbps (96 %) |
+| abonado2 subida | 512k | *a repetir* (ver `pruebas.md`) |
 | **Los dos juntos, bajada** | 512k + 768k = 1280k | 351 + 606 = **≈ 957 kbps** |
+| Los dos juntos, subida | 256k + 512k = 768k | *a medir* |
+
+Las bajadas se midieron el 19-nov con perfiles de 512k/512k y 768k/768k. Al alinear los planes con la base cambió solo la subida, así que las bajadas siguen valiendo.
 
 - **Por qué da 95-97 % y no 100 %:** el límite del plan cuenta todo lo que pasa por el cable, incluidos los encabezados de PPPoE, IP y TCP. El bandwidth-test mide solo los datos útiles.
 - **Por qué juntos no llegan:** la licencia gratuita del CHR limita a **1 Mbps por interfaz**. La `ether2` del router no puede mandar más de ~1 Mbps en total, así que los abonados se reparten ese "caño". Descartamos la CPU como causa porque no pasó del 16 %.
-- **Decisión del grupo (opción B):** mantener 512k/768k y explicar el límite en la presentación. Si en la demo los dos generan tráfico a la vez, en Grafana se va a ver que se reparten ~1 Mbps.
+- **Decisión del grupo (opción B):** mantener los planes y explicar el límite en la presentación. Si en la demo los dos **bajan** a la vez, en Grafana se va a ver que se reparten ~1 Mbps. Al **subir**, juntos suman 768k, así que deberían entrar los dos.
 
 ---
 
@@ -383,21 +394,36 @@ Y verificar con `/interface pppoe-client print detail`, que muestra todas las op
 
 Ver la sección 8.
 
+### 9.4 Los planes no coincidían con la base
+
+**Síntoma:** al revisar el repo el 20-nov, la base de la parte 1 tenía `plan-10m` = `256k/512k` y `plan-50m` = `512k/768k`, pero el router de prueba de esta parte usaba `plan-512k` = `512k/512k` y `plan-768k` = `768k/768k`. `radtest` (parte 2) confirmó que el RADIUS manda los valores de la base.
+
+**Por qué importa:** con el RADIUS, la velocidad la decide la base. Con perfiles distintos, el abonado cambiaría de velocidad al pasar de usuarios locales a RADIUS y las pruebas no coincidirían. Además, con otros nombres de perfil los comandos de la receta fallarían en el router oficial.
+
+**Solución:** se alinearon los perfiles del router de prueba (mismos nombres y valores que la base) y se repitieron solo las pruebas de subida. En el router:
+
+```
+/ppp profile set plan-512k name=plan-10m rate-limit=256k/512k
+/ppp profile set plan-768k name=plan-50m rate-limit=512k/768k
+```
+
+`set` modifica el perfil que ya existe: le cambia el nombre y la velocidad. Los usuarios y el servidor PPPoE que lo usan se actualizan solos. Después hay que reconectar los abonados para que tomen la cola nueva.
+
 ---
 
 ## 10. Pendientes
 
-- [ ] **Usuario de pruebas en el router** (`btest`, grupo de solo lectura), para no guardar la clave de `admin` en los abonados. Hay que sumarlo a la configuración de nacho.
+- [ ] **Usuario de pruebas en el router** (`btest`, grupo de solo lectura), para no guardar la clave de `admin` en los abonados. Hay que proponérselo a nacho para la configuración oficial.
+- [ ] **Repetir las pruebas de subida** con los planes alineados a la base.
 - [ ] **Script de tráfico + `/system scheduler`** en cada abonado, para que el tablero tenga movimiento en la demo.
 - [ ] **Cliente PPPoE extra para `moroso`** en abonado1, apagado, para mostrar el rechazo sin tocar la conexión normal.
 - [ ] **Pruebas de falla** (ver `pruebas.md`).
-- [ ] **Alinear la subida de los planes con la base:** `postgres/init/02-datos-acordados.sql` (agus) manda `Mikrotik-Rate-Limit` = `256k/512k` (abonado1) y `512k/768k` (abonado2): subida/bajada. La bajada coincide con la de esta parte; la subida no (acá se probó 512k y 768k). Con el RADIUS, manda la base. Charlarlo en el grupo.
 
 ---
 
 ## 11. Terminado cuando
 
 - [x] Los dos abonados se conectan a la vez y reciben una IP 100.64.1.x.
-- [x] Se puede generar tráfico a demanda y se ve el límite de cada plan.
+- [x] Se puede generar tráfico a demanda y se ve el límite de cada plan (bajada medida; subida a repetir con los planes alineados).
 - [ ] Las pruebas de falla están hechas y anotadas en `pruebas.md`.
 - [x] La configuración exportada está en esta carpeta y las notas están al día.
