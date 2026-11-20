@@ -335,16 +335,17 @@ Mientras corre, en WinBox del router, ventana **Queues**, se ve la cola del abon
 | Prueba | Plan | Medido |
 |---|---|---|
 | abonado1 bajada | 512k | 497 kbps (97 %) |
-| abonado1 subida | 256k | *a repetir* (ver `pruebas.md`) |
+| abonado1 subida | 256k | 240,7 kbps (94 %) |
 | abonado2 bajada | 768k | 746 kbps (97 %) |
-| abonado2 subida | 512k | *a repetir* (ver `pruebas.md`) |
+| abonado2 subida | 512k | 486 kbps (95 %) |
 | **Los dos juntos, bajada** | 512k + 768k = 1280k | 351 + 606 = **≈ 957 kbps** |
-| Los dos juntos, subida | 256k + 512k = 768k | *a medir* |
+| Los dos juntos, subida | 256k + 512k = 768k | 240,7 + 486,7 = **≈ 727 kbps**: cada uno llega a su plan |
 
-Las bajadas se midieron el 19-nov con perfiles de 512k/512k y 768k/768k. Al alinear los planes con la base cambió solo la subida, así que las bajadas siguen valiendo.
+Las bajadas se midieron el 19-nov con perfiles de 512k/512k y 768k/768k; las subidas, el 20-nov con los planes ya alineados. Al alinear los planes con la base cambió solo la subida, así que las bajadas siguen valiendo.
 
 - **Por qué da 95-97 % y no 100 %:** el límite del plan cuenta todo lo que pasa por el cable, incluidos los encabezados de PPPoE, IP y TCP. El bandwidth-test mide solo los datos útiles.
-- **Por qué juntos no llegan:** la licencia gratuita del CHR limita a **1 Mbps por interfaz**. La `ether2` del router no puede mandar más de ~1 Mbps en total, así que los abonados se reparten ese "caño". Descartamos la CPU como causa porque no pasó del 16 %.
+- **Por qué juntos no llegan al bajar:** la licencia gratuita del CHR limita a **1 Mbps lo que manda cada interfaz**. Al bajar, la que manda es la `ether2` del router, una sola para los dos abonados, que no puede pasar de ~1 Mbps: los abonados se reparten ese "caño". Descartamos la CPU como causa porque no pasó del 16 %.
+- **Por qué al subir sí llegan:** cada abonado manda por su propia `ether2`, con su propio límite, y el router solo recibe. Juntos suman 768k y cada uno llega a su plan.
 - **Decisión del grupo (opción B):** mantener los planes y explicar el límite en la presentación. Si en la demo los dos **bajan** a la vez, en Grafana se va a ver que se reparten ~1 Mbps. Al **subir**, juntos suman 768k, así que deberían entrar los dos.
 
 ---
@@ -400,7 +401,7 @@ Ver la sección 8.
 
 **Por qué importa:** con el RADIUS, la velocidad la decide la base. Con perfiles distintos, el abonado cambiaría de velocidad al pasar de usuarios locales a RADIUS y las pruebas no coincidirían. Además, con otros nombres de perfil los comandos de la receta fallarían en el router oficial.
 
-**Solución:** se alinearon los perfiles del router de prueba (mismos nombres y valores que la base) y se repitieron solo las pruebas de subida. En el router:
+**Solución:** se alinearon los perfiles del router de prueba (mismos nombres y valores que la base) y se repitieron solo las pruebas de subida: 240,7k (abonado1) y 486k (abonado2), los dos dentro de su plan. En el router:
 
 ```
 /ppp profile set plan-512k name=plan-10m rate-limit=256k/512k
@@ -414,7 +415,6 @@ Ver la sección 8.
 ## 10. Pendientes
 
 - [ ] **Usuario de pruebas en el router** (`btest`, grupo de solo lectura), para no guardar la clave de `admin` en los abonados. Hay que proponérselo a nacho para la configuración oficial.
-- [ ] **Repetir las pruebas de subida** con los planes alineados a la base.
 - [ ] **Script de tráfico + `/system scheduler`** en cada abonado, para que el tablero tenga movimiento en la demo.
 - [ ] **Cliente PPPoE extra para `moroso`** en abonado1, apagado, para mostrar el rechazo sin tocar la conexión normal.
 - [ ] **Pruebas de falla** (ver `pruebas.md`).
@@ -424,6 +424,6 @@ Ver la sección 8.
 ## 11. Terminado cuando
 
 - [x] Los dos abonados se conectan a la vez y reciben una IP 100.64.1.x.
-- [x] Se puede generar tráfico a demanda y se ve el límite de cada plan (bajada medida; subida a repetir con los planes alineados).
+- [x] Se puede generar tráfico a demanda y se ve el límite de cada plan (subida y bajada medidas con los planes de la base).
 - [ ] Las pruebas de falla están hechas y anotadas en `pruebas.md`.
 - [x] La configuración exportada está en esta carpeta y las notas están al día.

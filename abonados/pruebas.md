@@ -4,7 +4,7 @@ Para cada prueba se anota **antes** qué esperamos y **después** qué pasó de 
 
 ---
 
-## 1. Pruebas de tráfico (hechas el jue 19-nov, laboratorio de la parte 4)
+## 1. Pruebas de tráfico (bajada: jue 19-nov · subida: vie 20-nov · laboratorio de la parte 4)
 
 Herramienta: `/tool bandwidth-test` desde cada abonado contra el router (100.64.1.1), TCP, 30 segundos.
 
@@ -13,17 +13,18 @@ Planes (los de la base): abonado1 `plan-10m` = 256k subida / 512k bajada · abon
 | Prueba | Esperado | Medido | ¿Coincide? | Comentario |
 |---|---|---|---|---|
 | abonado1 bajada | ~512k | 497 kbps | ✅ | 97 % del plan. La diferencia son los encabezados (PPPoE, IP, TCP) |
-| abonado1 subida | ~256k | | | A repetir con el plan alineado (el 19-nov dio 487k con un perfil de 512k) |
+| abonado1 subida | ~256k | 240,7 kbps | ✅ | 94 %. Medido dos veces, mismo resultado. (El 19-nov, con el perfil viejo de 512k, había dado 487k) |
 | abonado2 bajada | ~768k | 746 kbps | ✅ | 97 % |
-| abonado2 subida | ~512k | | | A repetir con el plan alineado (el 19-nov dio 734k con un perfil de 768k) |
+| abonado2 subida | ~512k | 486 kbps | ✅ | 95 %. Medido dos veces: 485,9 y 486,7 kbps. (El 19-nov, con el perfil viejo de 768k, había dado 734k) |
 | Los dos juntos, bajada | 512k + 768k | 351 + 606 ≈ **957 kbps** | ❌ | Límite de 1 Mbps por interfaz de la licencia gratuita del CHR. CPU máxima 16 %: no era la CPU |
-| Los dos juntos, subida | 256k + 512k = 768k, entra en 1 Mbps | | | A medir: cada uno debería llegar a su plan |
+| Los dos juntos, subida | 256k + 512k = 768k, entra en 1 Mbps | 240,7 + 486,7 ≈ **727 kbps** | ✅ | Cada uno llegó a su plan. CPU máxima 15 % |
 
 **Observaciones:**
 - La cola del plan también frena el tráfico que va al propio router (no era seguro: lo comprobamos).
 - En la prueba simultánea, abonado1 arrancó unos segundos después. Su promedio de los últimos 10 s fue 294 kbps, pero al final subió a 564 kbps: cuando terminó la prueba de abonado2, abonado1 quedó con el "caño" libre.
 - **Decisión del grupo (opción B):** mantener los planes y explicar el límite en la presentación.
-- Las bajadas se midieron el 19-nov con perfiles de 512k/512k y 768k/768k. El 20-nov se alinearon los perfiles con la base (cambió solo la subida), así que las bajadas siguen valiendo.
+- Las bajadas se midieron el 19-nov con perfiles de 512k/512k y 768k/768k. El 20-nov se alinearon los perfiles con la base (cambió solo la subida), así que las bajadas siguen valiendo. Al reconectar, `/queue simple print` mostró `max-limit=256k/512k` (abonado1) y `max-limit=512k/768k` (abonado2).
+- **Por qué al subir juntos sí llegan y al bajar no:** el límite de la licencia es sobre lo que **manda** cada interfaz. Al bajar, la que manda es la `ether2` del router, una sola para los dos abonados: 512k + 768k no entran en ~1 Mbps. Al subir, cada abonado manda por su propia `ether2` (cada uno tiene su límite) y el router solo recibe: 768k en total, sin problema.
 
 ---
 
