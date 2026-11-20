@@ -60,6 +60,8 @@ En la imagen está en `/etc/freeradius`, y `/etc/raddb` es un enlace a esa carpe
 | Con qué usuario uso Docker | root · **`nico` en el grupo `docker`** | Trabajar todo como root aumenta el impacto de un error |
 | Por dónde empezar | Conectar primero la base de Agus · **FreeRADIUS solo, con usuarios en archivo** | Prefiero entender FreeRADIUS sin depender de otra parte, y sumar la base después |
 | Versión de la imagen | `latest-3.2` · **`3.2.10`** · `3.2.10-alpine` | `latest-3.2` cambia con el tiempo y cada uno podría integrar con otra versión. Alpine es más liviana pero trae menos herramientas para diagnosticar (sin `bash`). |
+| Cómo dar de alta al router | `clients.conf` · **tabla `nas` de la base** | `clients.conf` duplicaría el router y el secreto, que Agus ya cargó en la base, y podrían quedar distintos |
+| Logs de FreeRADIUS | **Modo debug (`command: -X`)** · modo normal y `-X` solo al diagnosticar | En modo normal `docker compose logs` sale vacío, y para diagnosticar habría que frenar y relanzar el contenedor a mano |
 
 ## 3. Qué elegí y por qué
 
@@ -68,6 +70,8 @@ En la imagen está en `/etc/freeradius`, y `/etc/raddb` es un enlace a esa carpe
 - **`nico` en el grupo `docker`.** Sé que en la práctica equivale a ser root, porque el motor de Docker corre como root. En un laboratorio es aceptable; en un servidor real se cuida.
 - **Imagen `freeradius/freeradius-server:3.2.10`** (base Ubuntu), la última 3.2 al 20-nov.
 - **Primero FreeRADIUS solo**, con usuarios en archivo, y la base en la etapa 2.
+- **Router dado de alta en la tabla `nas`** (la que cargó Agus), activando `read_clients` en el módulo `sql` en la etapa 2. Así hay un solo lugar con todo: abonados, planes y routers. Lo que se resigna: si PostgreSQL no está disponible cuando arranca FreeRADIUS, no carga a ningún router (relacionado con la prueba "Se cae la base").
+- **Modo debug (`-X`) en el compose**, porque lo que más se evalúa es el diagnóstico y así lo puedo mostrar en vivo. En producción se sacaría: atiende un pedido por vez y loguea mucho detalle. `-X` equivale a `-sfxx -l stdout`: primer plano (necesario en Docker), un solo hilo, detalle alto y log a la salida estándar.
 
 ## 4. Qué hice
 
@@ -192,6 +196,14 @@ moroso Cleartext-Password := "clave3", Auth-Type := Reject
 
 **Conclusión:** el moroso se rechaza por **quién es**, en `authorize`, antes de mirar la contraseña. La clave incorrecta se rechaza en `authenticate`. Desde afuera los dos son iguales; el `-X` muestra la diferencia.
 
+### Etapa 1 en el repo: servicio `freeradius` en `docker-compose.yml`
+
+- Imagen fija `3.2.10`, `container_name: isp-freeradius`, `restart: unless-stopped` y `command: -X`.
+- `depends_on` con `condition: service_healthy`: no arranca hasta que el `healthcheck` de PostgreSQL (`pg_isready`) da OK. En el primer `docker compose up -d` se vio: `isp-postgres Healthy` a los 13.2 s e `isp-freeradius Started` a los 13.6 s.
+- Puertos publicados solo en `10.10.50.10` (1812 y 1813 UDP): `docker compose ps` muestra `10.10.50.10:1812-1813->1812-1813/udp`. PostgreSQL muestra `5432/tcp` sin flecha: no está publicado.
+- `docker exec isp-freeradius radtest pepe clave123 127.0.0.1 0 testing123` → Reject, como se esperaba: todavía usa el `users` de fábrica y no está conectado a la base.
+- Los `volumes` quedan comentados hasta crear los archivos de `freeradius/` en la etapa 2.
+
 ## 5. Qué falló y cómo lo diagnostiqué
 
 | Síntoma | Cómo lo diagnostiqué (comando o log) | Causa | Solución |
@@ -200,6 +212,8 @@ moroso Cleartext-Password := "clave3", Auth-Type := Reject
 | Las MAC de `ip -br link` no coincidían con las de mi captura de VirtualBox | `VBoxManage showvminfo isp-servicios --machinereadable` | Había recreado la VM después de la captura: MAC nuevas | Ninguna. Lección: verificar contra el estado actual, no contra una captura vieja. |
 | `ping 10.10.50.1` → `Destination Host Unreachable` | El error lo genera la propia VM (`From 10.10.50.10`) | Nadie responde ARP: el router todavía no existe | Esperado. Va a ser la primera prueba cuando esté el router. |
 | Después de `exit`, se abrió `nano` diciendo "no es de escritura" | El prompt había vuelto a `nico` (`$`) | Había pegado `su -` y `nano …` juntos: la línea de nano quedó pendiente y se ejecutó como `nico` | Salir con Ctrl+X. El archivo estaba intacto. |
+| Al editar el compose dejé `# freeradius:` comentado (y una `S` suelta en un puerto) | Revisando el bloque antes de levantar, y con `docker compose config --quiet` | Sin la línea del servicio, las claves de abajo quedaban dentro del servicio `postgres` | Descomentar con 2 espacios, alineado con `postgres:`. Validar siempre con `docker compose config` antes de `up`. |
+| `docker compose logs freeradius` salía vacío | — | En modo normal, FreeRADIUS no loguea a la salida estándar | `command: -X` |
 | Agregué un usuario a `users` dentro del contenedor y seguía rechazándolo | El `-X` no mostraba `Matched entry` | FreeRADIUS lee la configuración solo al arrancar. Además, con `--rm`, reiniciar borraba el cambio. | Archivo en la VM montado con `-v` y reinicio del contenedor |
 
 ## 6. Cómo usé la IA
@@ -214,7 +228,8 @@ Qué respondió mal y cómo me di cuenta:
 
 ## Pendientes
 
-- [ ] Decidir cómo dar de alta al router: `clients.conf` o la tabla `nas` de la base
-- [ ] Armar mi bloque del `docker-compose.yml` con la imagen `3.2.10` y los archivos montados desde `freeradius/`
+- [x] Decidir cómo dar de alta al router → tabla `nas`
+- [x] Bloque del `docker-compose.yml` con la imagen `3.2.10` y `-X`
+- [ ] Charlar con Agus al final: en `nas` cargó `10.10.50.0/24` (toda la red) en vez de `10.10.50.1`. Mínimo privilegio: solo el router debería poder preguntar. Primero ver con qué IP llegan los pedidos del router.
 - [ ] Etapa 2: módulo `sql` contra PostgreSQL (abonado1 Accept con su plan, moroso y clave incorrecta Reject, intentos en `radpostauth`)
 - [ ] Verificar la prueba "Secreto distinto": ¿el RADIUS ignora el pedido?

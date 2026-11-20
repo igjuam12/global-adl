@@ -27,21 +27,29 @@ services:
     # Solo es accesible por FreeRADIUS y Grafana a través de la red interna de Docker.
 
   # ==============================================================================
-  # PARTE 2: FreeRADIUS 3.2 - (Se descomenta al integrar con Parte 2)
+  # PARTE 2: FreeRADIUS 3.2.10 - [ACTIVO]
+  # Responsable: Nico
   # ==============================================================================
-  # freeradius:
-  #   image: freeradius/freeradius-server:latest-3.2
-  #   container_name: isp-freeradius
-  #   restart: unless-stopped
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   ports:
-  #     - "10.10.50.10:1812:1812/udp"
-  #     - "10.10.50.10:1813:1813/udp"
-  #   volumes:
-  #     - ./freeradius/clients.conf:/etc/raddb/clients.conf:ro
-  #     - ./freeradius/sql:/etc/raddb/mods-enabled/sql:ro
+  freeradius:
+    image: freeradius/freeradius-server:3.2.10
+    container_name: isp-freeradius
+    restart: unless-stopped
+    # Modo debug (-X = -sfxx -l stdout): detalle de cada pedido en
+    # "docker compose logs -f freeradius". En producción se sacaría.
+    command: -X
+    # Espera a que la base esté sana: los routers (tabla nas) y los
+    # abonados se leen de PostgreSQL. Ver notas/nico.md.
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Solo en la IP de la red de servicios: lo alcanza el router, no la red NAT
+    ports:
+      - "10.10.50.10:1812:1812/udp"   # autenticación
+      - "10.10.50.10:1813:1813/udp"   # accounting
+    # Se activan a medida que se crean los archivos en freeradius/ (etapa 2)
+    # volumes:
+    #   - ./freeradius/clients.conf:/etc/raddb/clients.conf:ro
+    #   - ./freeradius/sql:/etc/raddb/mods-enabled/sql:ro
 
   # ==============================================================================
   # PARTE 5: Telegraf (Recolección SNMP y Syslog) - (Se descomenta con Parte 5)
