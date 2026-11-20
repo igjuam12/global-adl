@@ -1,132 +1,111 @@
 name: isp-lab
 
+# ==============================================================================
+# Los contenedores de isp-servicios (10.10.50.10): lo que hace funcionar al ISP.
+#
+#   postgres     guarda abonados, planes y accounting
+#   freeradius   contesta al router y escribe el accounting
+#
+# El monitoreo (Alloy, Prometheus, Loki y Grafana) corre en otra VM y tiene su
+# propio archivo: docker-compose.monitoreo.yml.
+#
+# Hacia afuera solo se publica, y solo en la IP de la red de servicios:
+#   1812 y 1813/udp   RADIUS (lo usa el router)
+#   5432/tcp          PostgreSQL (lo usa Grafana desde isp-monitoreo; quién puede
+#                     entrar y desde dónde lo decide postgres/pg_hba.conf)
+# ==============================================================================
+
 services:
-  # ==============================================================================
-  # PARTE 1: Base de Datos (PostgreSQL 17) - [ACTIVO]
-  # Responsable: Agustín
-  # ==============================================================================
+  # ============================================================================
+  # PARTE 1: Base de datos (PostgreSQL)
+  # ============================================================================
   postgres:
-    image: postgres:17
+    image: postgres:17.12
     container_name: isp-postgres
     restart: unless-stopped
+    # Usar nuestra lista de quién puede entrar, en lugar de la de fábrica
+    command: ["postgres", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
     environment:
+      # El administrador de la base. No lo usa ninguna aplicación.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
       POSTGRES_DB: radius
-      POSTGRES_USER: radius
-      POSTGRES_PASSWORD: ${RADIUS_DB_PASSWORD}
+      # Las claves de los otros dos usuarios, que crea postgres/init/04-roles-y-permisos.sh
+      RADIUS_DB_PASSWORD: ${RADIUS_DB_PASSWORD}
       GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+    ports:
+      - "10.10.50.10:5432:5432"   # para Grafana, que está en la otra VM
     volumes:
+      # Los datos viven en un volumen: sobreviven a borrar y recrear el contenedor
       - pgdata:/var/lib/postgresql/data
+      # Estos archivos corren una sola vez, en orden, cuando la base se crea vacía
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U radius -d radius"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d radius"]
       interval: 5s
       timeout: 3s
       retries: 10
-    # DECISIÓN DE SEGURIDAD (Justificada en notas/agustin.md):
-    # PostgreSQL NO publica puertos hacia Windows ni la red externa.
-    # Solo es accesible por FreeRADIUS y Grafana a través de la red interna de Docker.
 
-  # ==============================================================================
-  # PARTE 2: FreeRADIUS 3.2 - (Se descomenta al integrar con Parte 2)
-  # ==============================================================================
-  # freeradius:
-  #   image: freeradius/freeradius-server:latest-3.2
-  #   container_name: isp-freeradius
-  #   restart: unless-stopped
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   ports:
-  #     - "10.10.50.10:1812:1812/udp"
-  #     - "10.10.50.10:1813:1813/udp"
-  #   volumes:
-  #     - ./freeradius/clients.conf:/etc/raddb/clients.conf:ro
-  #     - ./freeradius/sql:/etc/raddb/mods-enabled/sql:ro
-
-  # ==============================================================================
-  # PARTE 5: Alloy (recolector único: SNMP del router + syslog) - [ACTIVO]
-  # Responsable: Igna. Reemplaza al Telegraf que proponía la guía de referencia
-  # (el porqué está en notas/igna.md).
-  # ==============================================================================
-  alloy:
-    image: grafana/alloy:v1.21.0
-    container_name: isp-alloy
+  # ============================================================================
+  # PARTE 2: FreeRADIUS
+  # ============================================================================
+  freeradius:
+    # Imagen propia: la oficial más nuestra configuración (ver freeradius/Dockerfile)
+    build: ./freeradius
+    image: isp-lab/freeradius:3.2.10
+    container_name: isp-freeradius
     restart: unless-stopped
-    command:
-      - run
-      - --server.http.listen-addr=0.0.0.0:12345
-      - --storage.path=/var/lib/alloy/data
-      - /etc/alloy/config.alloy
+    environment:
+      RADIUS_DB_PASSWORD: ${RADIUS_DB_PASSWORD}
+      RADIUS_SHARED_SECRET: ${RADIUS_SHARED_SECRET}
     depends_on:
-      - prometheus
-      - loki
-    ports:
-      - "10.10.50.10:1514:1514/udp"   # syslog que manda el router (red de servicios)
-      - "${GESTION_IP:-127.0.0.1}:12345:12345"   # interfaz web de Alloy (diagnóstico)
-    volumes:
-      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - ./alloy/snmp-auths.yml:/etc/alloy/snmp-auths.yml:ro
-      - alloydata:/var/lib/alloy/data
-
-  # ==============================================================================
-  # PARTE 5: Prometheus (métricas del router; las empuja Alloy por remote_write)
-  # ==============================================================================
-  prometheus:
-    image: prom/prometheus:v3.13.1
-    container_name: isp-prometheus
-    restart: unless-stopped
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=15d
-      - --web.enable-remote-write-receiver
-    ports:
-      - "${GESTION_IP:-127.0.0.1}:9090:9090"   # solo diagnóstico, no se publica a la red de servicios
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - promdata:/prometheus
-
-  # ==============================================================================
-  # PARTE 5: Loki (logs de syslog del MikroTik). Sin puerto publicado: solo lo
-  # usan Alloy (escribe) y Grafana (lee) por la red interna de Docker.
-  # ==============================================================================
-  loki:
-    image: grafana/loki:3.7.0
-    container_name: isp-loki
-    restart: unless-stopped
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - lokidata:/loki
-
-  # ==============================================================================
-  # PARTE 1 y 5: Grafana (Tablero del NOC de ISP) - [ACTIVO]
-  # ==============================================================================
-  grafana:
-    image: grafana/grafana:13.2.1
-    container_name: isp-grafana
-    restart: unless-stopped
-    depends_on:
+      # No arranca hasta que la base conteste: si no, falla al abrir sus conexiones
       postgres:
         condition: service_healthy
-      prometheus:
-        condition: service_started
-      loki:
-        condition: service_started
     ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD}
+      - "10.10.50.10:1812:1812/udp"   # autenticación: "¿lo dejo pasar?"
+      - "10.10.50.10:1813:1813/udp"   # accounting: "esto usó"
     volumes:
-      - grafanadata:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # La hora local de la VM. Sin esto el contenedor escribe sus logs en UTC,
+      # tres horas adelantado respecto del router y del tablero.
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      # Le pregunta a FreeRADIUS, en idioma RADIUS, si está vivo (Status-Server).
+      # No toca la base ni deja rastro en las tablas.
+      test: ["CMD-SHELL", "echo 'Message-Authenticator = 0x00' | radclient -q -t 2 -r 1 127.0.0.1:18121 status adminsecret"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      # Además de guardarlo, Docker manda lo que escribe FreeRADIUS al recolector
+      # de isp-monitoreo, para tener sus decisiones ("Login OK" / "Login
+      # incorrect") junto a los logs del router. Es UDP: si el recolector está
+      # caído, FreeRADIUS no se entera.
+      driver: syslog
+      options:
+        syslog-address: "udp://10.10.50.20:1515"
+        syslog-format: rfc3164
+        tag: freeradius
+
+  # ============================================================================
+  # El exportador del servidor: publica CPU, memoria y carga de esta VM para que
+  # el Prometheus de isp-monitoreo las lea. Solo mira /proc y /sys, de solo
+  # lectura. Con él, el tablero sabe si este servidor responde o no.
+  # ============================================================================
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    container_name: isp-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+    ports:
+      - "10.10.50.10:9100:9100"   # métricas del servidor, solo en la red de servicios
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
 
 volumes:
   pgdata:
-  alloydata:
-  promdata:
-  lokidata:
-  grafanadata:

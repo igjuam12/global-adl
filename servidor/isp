@@ -1,0 +1,168 @@
+#!/bin/bash
+# ==============================================================================
+# isp - operar el ISP con un comando
+#
+# Junta en un solo lugar las dos cosas que hay que hacer para que un cambio
+# valga YA y no recién cuando el abonado se reconecte:
+#   1. cambiar el dato en la base (lo que FreeRADIUS va a contestar de ahora en más)
+#   2. avisarle al router, con un mensaje RADIUS que va "al revés" (del servidor
+#      al router, puerto 3799): Disconnect para cortar, CoA para cambiar la velocidad.
+#
+# Se usa en isp-servicios:   sudo isp <comando>
+# ("isp" es un atajo a /opt/isp-lab/servidor/isp que deja el despliegue)
+# ==============================================================================
+set -euo pipefail
+
+YO="$(readlink -f "$0")"     # la ruta real del script, aunque se lo llame por el atajo
+cd "$(dirname "$YO")/.."
+
+ROUTER=10.10.50.1     # a quién se le mandan los avisos
+PUERTO=3799           # donde el router los escucha (/radius incoming)
+
+# Consulta a la base como administrador:   sql "<consulta>" [variable=valor ...]
+# Lo que escribe el operador entra como variable de psql (:'nombre') y nunca
+# pegado dentro del SQL. La consulta viaja por la entrada estándar porque psql
+# no reemplaza variables cuando se le pasa con -c.
+_psql() {
+  local formato="$1" consulta="$2"; shift 2
+  local variables=() v
+  for v in "$@"; do variables+=(-v "$v"); done
+  printf '%s\n' "$consulta" | docker compose exec -T postgres \
+      psql -U postgres -d radius -v ON_ERROR_STOP=1 $formato "${variables[@]}" -f -
+}
+sql()   { _psql "-qtA" "$@"; }   # solo el valor, para usarlo en el script
+tabla() { _psql "-q" "$@"; }     # tabla prolija, para mostrar
+
+# Manda un aviso al router desde el contenedor de FreeRADIUS, firmado con el
+# secreto compartido.   avisar_al_router coa|disconnect "Atributo=valor,..."
+avisar_al_router() {
+  local respuesta
+  respuesta=$(printf '%s\n' "$2" | docker compose exec -T freeradius \
+      sh -c 'radclient -x -t 3 -r 2 "$0:$1" "$2" "$RADIUS_SHARED_SECRET" 2>&1' "$ROUTER" "$PUERTO" "$1" || true)
+  if   grep -q -E 'Received (CoA|Disconnect)-ACK' <<<"$respuesta"; then echo "  el router confirmó (ACK)"
+  elif grep -q -E 'Received (CoA|Disconnect)-NAK' <<<"$respuesta"; then echo "  el router contestó que no (NAK): no tiene una conexión abierta de ese abonado"
+  else echo "  el router no contestó"; fi
+}
+
+exigir_abonado() {
+  [ "$(sql "SELECT count(*) FROM radcheck WHERE username = :'a'" a="$1")" -gt 0 ] \
+    || { echo "No existe el abonado '$1'. Probá: isp abonados" >&2; exit 1; }
+}
+
+case "${1:-ayuda}" in
+  abonados)
+    tabla "SELECT abonado, plan, velocidad,
+                  CASE WHEN suspendido THEN 'SUSPENDIDO' ELSE 'habilitado' END AS estado
+           FROM v_abonados ORDER BY 1"
+    ;;
+
+  sesiones)
+    tabla "SELECT abonado, host(ip) AS ip, mac, estado,
+                  to_char(inicio AT TIME ZONE 'America/Argentina/Buenos_Aires', 'HH24:MI:SS') AS inicio,
+                  segundos, bytes_subida, bytes_bajada
+           FROM v_sesiones WHERE estado <> 'cerrada' ORDER BY v_sesiones.inicio"
+    ;;
+
+  estado)
+    docker compose ps --format "table {{.Name}}\t{{.Status}}"
+    echo; "$YO" abonados; "$YO" sesiones
+    ;;
+
+  suspender)
+    a="${2:?uso: isp suspender <abonado>}"; exigir_abonado "$a"
+    # Suspender es agregarle el grupo "morosos" con prioridad 0. Su plan no se toca.
+    sql "INSERT INTO radusergroup (username, groupname, priority)
+         SELECT :'a', 'morosos', 0
+         WHERE NOT EXISTS (SELECT 1 FROM radusergroup WHERE username = :'a' AND groupname = 'morosos')" a="$a"
+    echo "$a quedó suspendido en la base: desde ahora el RADIUS lo rechaza."
+    echo "Cortando su conexión actual..."
+    avisar_al_router disconnect "User-Name=$a"
+    ;;
+
+  rehabilitar)
+    a="${2:?uso: isp rehabilitar <abonado>}"; exigir_abonado "$a"
+    sql "DELETE FROM radusergroup WHERE username = :'a' AND groupname = 'morosos'" a="$a"
+    echo "$a quedó habilitado. Vuelve a entrar solo, con su plan de siempre, en su próximo intento."
+    ;;
+
+  plan)
+    a="${2:?uso: isp plan <abonado> <plan>}"; p="${3:?uso: isp plan <abonado> <plan>}"; exigir_abonado "$a"
+    velocidad=$(sql "SELECT value FROM radgroupreply WHERE groupname = :'p' AND attribute = 'Mikrotik-Rate-Limit'" p="$p")
+    if [ -z "$velocidad" ]; then
+      echo "No existe el plan '$p'. Planes: $(sql "SELECT string_agg(groupname, ', ') FROM radgroupreply WHERE attribute = 'Mikrotik-Rate-Limit'")" >&2
+      exit 1
+    fi
+    sql "UPDATE radusergroup SET groupname = :'p' WHERE username = :'a' AND groupname <> 'morosos'" a="$a" p="$p"
+    echo "$a pasó al plan $p ($velocidad) en la base."
+    echo "Aplicando la velocidad nueva a su conexión actual, sin cortarla..."
+    avisar_al_router coa "User-Name=$a,Mikrotik-Rate-Limit=$velocidad"
+    ;;
+
+  desconectar)
+    a="${2:?uso: isp desconectar <abonado>}"; exigir_abonado "$a"
+    echo "Cortando la conexión de $a (si está habilitado, vuelve a entrar solo)..."
+    avisar_al_router disconnect "User-Name=$a"
+    ;;
+
+  cerrar-fantasmas)
+    # Una "sesión fantasma" es una conexión que quedó abierta en la base porque el
+    # aviso de salida nunca llegó (por ejemplo, el RADIUS estaba caído cuando el
+    # abonado se desconectó). Si el router se reinicia las cierra él al avisar;
+    # este comando es para cerrarlas a mano sin esperar eso.
+    #
+    # Ojo: si el accounting estuvo cortado más de 3 minutos, las conexiones que
+    # siguen vivas también figuran "sin noticias" hasta que llega su próximo
+    # aviso. Por eso antes de cerrar se comprueba que los avisos estén llegando:
+    # tiene que haber alguno en cada uno de los últimos dos minutos. Así toda
+    # conexión viva ya tuvo tiempo de avisar, y las que siguen sin noticias son
+    # fantasmas de verdad. Con "forzar" se saltea la comprobación (sirve cuando
+    # no queda nadie conectado que mande avisos).
+    if [ "${2:-}" != "forzar" ]; then
+      llegan=$(sql "SELECT (count(*) FILTER (WHERE momento >  now() - interval '1 minute') > 0
+                        AND count(*) FILTER (WHERE momento <= now() - interval '1 minute') > 0)
+                    FROM radacct_historial WHERE momento > now() - interval '2 minutes'")
+      if [ "$llegan" != "t" ]; then
+        echo "El accounting no está llegando de forma continua: no hubo avisos en cada uno de los últimos dos minutos."
+        echo "Así no se distingue una conexión caída de una viva que todavía no avisó. No se cerró nada."
+        echo "Con el RADIUS andando, repetí el comando en dos minutos. Si no queda nadie conectado: isp cerrar-fantasmas forzar"
+        exit 1
+      fi
+    fi
+    n=$(sql "WITH cerradas AS (
+               UPDATE radacct a SET acctstoptime = now(), acctterminatecause = 'Admin-Reset'
+               WHERE a.acctstoptime IS NULL
+                 AND a.acctuniqueid IN (SELECT sesion FROM v_sesiones WHERE estado = 'sin noticias')
+               RETURNING 1)
+             SELECT count(*) FROM cerradas")
+    echo "Sesiones fantasma cerradas: $n"
+    ;;
+
+  probar)
+    a="${2:?uso: isp probar <abonado> <clave>}"; c="${3:?uso: isp probar <abonado> <clave>}"
+    # Le pregunta al RADIUS como si fuera el router, pero desde el propio contenedor
+    docker compose exec -T freeradius sh -c 'radtest -t mschap "$0" "$1" 127.0.0.1 0 "$RADIUS_SHARED_SECRET"' "$a" "$c" </dev/null \
+      | grep -E 'Received|Mikrotik' || true
+    ;;
+
+  logs)
+    docker compose logs --no-log-prefix --tail "${2:-20}" freeradius | grep -E 'Login|Error' || true
+    ;;
+
+  *)
+    cat <<'AYUDA'
+Uso: sudo isp <comando>
+
+  estado                    contenedores, abonados y conexiones abiertas
+  abonados                  cada abonado con su plan y si está suspendido
+  sesiones                  conexiones abiertas ahora
+  suspender <abonado>       lo marca como moroso y lo desconecta en el momento
+  rehabilitar <abonado>     le saca la marca; vuelve a entrar solo
+  plan <abonado> <plan>     le cambia el plan y aplica la velocidad sin desconectarlo
+  desconectar <abonado>     corta su conexión
+  cerrar-fantasmas [forzar] cierra en la base las conexiones que quedaron abiertas sin noticias
+                            (solo si el accounting está llegando; "forzar" lo saltea)
+  probar <abonado> <clave>  le pregunta al RADIUS sin pasar por el router
+  logs [N]                  últimos intentos de conexión que registró FreeRADIUS
+AYUDA
+    ;;
+esac
