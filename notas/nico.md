@@ -15,6 +15,29 @@ FreeRADIUS es "la lista de invitados" del ISP. El router (el cliente RADIUS) le 
 - Si el **usuario** no existe o la clave está mal, FreeRADIUS responde Reject **sin decir el motivo**, para no revelar qué usuarios son válidos.
 - Si el **cliente** es desconocido o tiene otro secreto, FreeRADIUS **ni contesta**: ignora el paquete (a verificar en la prueba "Secreto distinto").
 
+### Por qué FreeRADIUS (lo eligió el plan; investigué por qué tiene sentido)
+
+No fue una decisión mía: la consigna y el plan piden FreeRADIUS. Lo que investigué es por qué es una buena elección y qué otras había.
+
+| Razón | Por qué importa en el proyecto |
+| --- | --- |
+| Libre y gratuito (código abierto) | Sin licencias, igual que Debian, PostgreSQL y Grafana |
+| Es el servidor RADIUS libre más difundido | Mucha documentación y ejemplos; lo usan ISPs reales |
+| Trae soporte de bases SQL listo | Incluye el esquema de tablas (`radcheck`, `radacct`…) que usó Agus y las consultas para PostgreSQL (`queries.conf`): no hubo que escribir SQL |
+| Trae el diccionario de MikroTik | Ya conoce `Mikrotik-Rate-Limit` |
+| Imagen oficial de Docker | `freeradius/freeradius-server` la publica el propio proyecto (la cuenta `freeradius/`), con cada versión y la configuración de fábrica sin cambios |
+| Herramientas de prueba incluidas | `radtest` y `radclient` (para el Disconnect) |
+
+| Alternativa | Por qué no |
+| --- | --- |
+| NPS de Microsoft | Requiere Windows Server (licencia) y no corre en Docker sobre Linux |
+| Cisco ISE y otros comerciales | Pagos y pensados para empresas grandes |
+| User Manager de MikroTik (RADIUS dentro del router) | El RADIUS quedaría dentro del router, que es justo lo que el proyecto separa, y no se integra con PostgreSQL ni Grafana |
+
+**RADIUS vs FreeRADIUS:** RADIUS es el protocolo (el "idioma" entre router y servidor); FreeRADIUS es un programa que lo implementa. Es como HTTP y Apache.
+
+**¿Corre en Windows?** No hay versión oficial para Windows. Se puede correr *sobre* Windows con WSL2 o Docker Desktop, pero los dos esconden una VM Linux debajo: siempre hace falta un Linux. Nosotros lo hicimos visible con la VM isp-servicios, que además se enchufa a la red del router.
+
 ### Cómo procesa un pedido (lo vi con `-X`)
 
 Cada pedido pasa por **etapas** definidas en el servidor virtual `default` (`sites-enabled/default`). En cada etapa se ejecuta una lista de **módulos**, y cada uno responde `ok`, `noop` (no hizo nada), `updated`, `reject`, etc.
@@ -55,7 +78,9 @@ En la imagen está en `/etc/freeradius`, y `/etc/raddb` es un enlace a esa carpe
 | Decisión | Opciones | Por qué descarté las otras |
 | --- | --- | --- |
 | Dónde probar FreeRADIUS | Docker Desktop en Windows · **VM isp-servicios propia** · otra VM Debian | Docker Desktop y otra VM no tienen la IP 10.10.50.10, y el compose publica los puertos en esa IP: habría que adaptarlo. Además, Docker Desktop puede chocar con VirtualBox. |
-| Cómo entrar por SSH a la VM | **Reenvío de puertos en el NAT** · adaptador solo-anfitrión | El solo-anfitrión suma un adaptador que no está en la topología del plan |
+| Cómo entrar por SSH a la VM | **Reenvío de puertos en el NAT** (`127.0.0.1:2222` → 22) · adaptador solo-anfitrión · adaptador puente | El solo-anfitrión suma un adaptador que no está en la topología del plan. El puente pone la VM en la red de mi casa: la vería cualquiera en el WiFi y la IP cambiaría según dónde esté |
+| Red de servicios (router ↔ RADIUS) | **Red interna de VirtualBox** · solo-anfitrión | Con solo-anfitrión, mi Windows quedaría dentro de la red del ISP, que tiene que estar aislada (solo router y servidores). Las filas `192.168.56.x` que Agus cargó en `nas` corresponden a esta opción |
+| Diseño general | **VMs separadas (MikroTik) + contenedores en isp-servicios** · una sola VM con todo en Docker, incluido el MikroTik | RouterOS es su propio sistema operativo con su propio kernel: no corre como contenedor común (las imágenes que lo hacen arrancan una VM escondida adentro con QEMU). PPPoE y la VLAN 100 necesitan una red de capa 2 entre router y abonados, que las redes de Docker no dan de forma simple. Separado es como un ISP real, y cada pieza puede fallar sola (prueba "Se cae el RADIUS"). Regla: VM para otro sistema operativo, contenedor para programas de Linux |
 | Cómo instalar Docker | Paquete `docker.io` de Debian · **repositorio oficial de Docker** · script `get.docker.com` | `docker.io` trae Compose v1 (`docker-compose`), que no entiende `docker compose up -d`. El script es una caja negra que no puedo explicar. |
 | Con qué usuario uso Docker | root · **`nico` en el grupo `docker`** | Trabajar todo como root aumenta el impacto de un error |
 | Por dónde empezar | Conectar primero la base de Agus · **FreeRADIUS solo, con usuarios en archivo** | Prefiero entender FreeRADIUS sin depender de otra parte, y sumar la base después |
@@ -270,3 +295,4 @@ Qué respondió mal y cómo me di cuenta:
 - [ ] Charlar con Agus al final: la tabla `nas` tiene, además de `10.10.50.1`, `10.10.50.0/24`, `127.0.0.1` y dos filas de solo-anfitrión (`192.168.56.x`). Mínimo privilegio: ¿hacen falta? Primero ver con qué IP llegan los pedidos del router.
 - [ ] Etapa 3, con el router de Nacho: accounting en `radacct` y Disconnect con `radclient`
 - [ ] Verificar la prueba "Secreto distinto": ¿el RADIUS ignora el pedido?
+- [ ] Etapa 3: ver si el router usa PAP o CHAP / MS-CHAPv2 para los abonados (en el `-X`, qué módulo autentica: `pap`, `chap` o `mschap`). Las claves están como `Cleartext-Password`, así que los tres funcionan
