@@ -13,7 +13,7 @@ FreeRADIUS es "la lista de invitados" del ISP. El router (el cliente RADIUS) le 
 - **Cliente** = quien le pregunta al RADIUS: el router. En las pruebas, `radtest` se hace pasar por router.
 - **Usuario** = el abonado. El abonado nunca habla con el RADIUS.
 - Si el **usuario** no existe o la clave está mal, FreeRADIUS responde Reject **sin decir el motivo**, para no revelar qué usuarios son válidos.
-- Si el **cliente** es desconocido o tiene otro secreto, FreeRADIUS **ni contesta**: ignora el paquete (a verificar en la prueba "Secreto distinto").
+- Si el **cliente** es desconocido o tiene otro secreto, FreeRADIUS **ni contesta**: ignora el paquete (verificado en la prueba "Secreto distinto", sección 4).
 
 ### Por qué FreeRADIUS (lo eligió el plan; investigué por qué tiene sentido)
 
@@ -263,6 +263,28 @@ docker exec isp-postgres psql -U radius -d radius -c "SELECT id, username, reply
 
 La columna `authdate` se muestra en **UTC** (`+00`): `14:06` en la base eran las `11:06` en Argentina. La hora se guarda bien; para Grafana hay que mostrarla en `America/Argentina/Buenos_Aires` (sección 14 del plan: "datos corridos 3 horas").
 
+### Prueba de falla: secreto distinto (sin router)
+
+Usuario y clave correctos, pero con el secreto equivocado: `radtest` hace de router que no sabe la "seña".
+
+```bash
+docker exec isp-freeradius radtest abonado1 clave1 127.0.0.1 0 secretofalso
+```
+
+- `radtest`: `Sent Access-Request Id 90` **tres veces** (reintenta, como un router real, porque UDP no confirma) y al final `No reply from server for ID 90`.
+- Log de FreeRADIUS (`docker compose logs -f freeradius`), una vez por cada intento:
+
+  ```
+  Dropping packet without response because of error: Received packet from 127.0.0.1
+  with invalid Message-Authenticator!  (Shared secret is incorrect.) (from client localhost)
+  ```
+
+**Qué pasa:** por la IP reconoce al cliente (`localhost`), calcula la firma (`Message-Authenticator`) con el secreto que tiene para él (`testing123`) y no coincide. Entonces **descarta el pedido sin responder**: no puede confiar en nada de ese mensaje, y un Reject le confirmaría a un atacante que hay un RADIUS ahí.
+
+**Para diagnosticar:** si el router ve un **Reject**, el problema es del usuario (clave, moroso). Si ve un **timeout**, el RADIUS lo ignoró o no le llega: hay que revisar el **secreto**, la **IP del router en `nas`** o la **red**.
+
+Detalle: esta vez `NAS-IP-Address` fue `172.18.0.2` (antes `172.18.0.3`). Al recrear los contenedores, Docker reasigna las IPs. Por eso en `freeradius/sql` se usa el nombre `postgres` y no una IP.
+
 ## 5. Qué falló y cómo lo diagnostiqué
 
 | Síntoma | Cómo lo diagnostiqué (comando o log) | Causa | Solución |
@@ -294,5 +316,5 @@ Qué respondió mal y cómo me di cuenta:
 - [x] Etapa 2: módulo `sql` contra PostgreSQL (abonado1 Accept con su plan, moroso y clave incorrecta Reject, intentos en `radpostauth`)
 - [ ] Charlar con Agus al final: la tabla `nas` tiene, además de `10.10.50.1`, `10.10.50.0/24`, `127.0.0.1` y dos filas de solo-anfitrión (`192.168.56.x`). Mínimo privilegio: ¿hacen falta? Primero ver con qué IP llegan los pedidos del router.
 - [ ] Etapa 3, con el router de Nacho: accounting en `radacct` y Disconnect con `radclient`
-- [ ] Verificar la prueba "Secreto distinto": ¿el RADIUS ignora el pedido?
+- [x] Prueba "Secreto distinto": FreeRADIUS descarta el pedido sin responder (sección 4)
 - [ ] Etapa 3: ver si el router usa PAP o CHAP / MS-CHAPv2 para los abonados (en el `-X`, qué módulo autentica: `pap`, `chap` o `mschap`). Las claves están como `Cleartext-Password`, así que los tres funcionan
