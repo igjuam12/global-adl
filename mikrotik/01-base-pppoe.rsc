@@ -31,9 +31,11 @@
 # Mientras el servidor no exista, simplemente no sincroniza.
 /system ntp client set enabled=yes servers=10.10.50.10
 
-# El CHR trae de fábrica un cliente DHCP en ether1. Lo borramos: a la gestión
-# se entra por MAC con WinBox, así que el router no necesita IP en esa red
-/ip dhcp-client remove [find]
+# El CHR trae de fábrica un cliente DHCP en ether1. Lo apagamos: a la gestión
+# se entra por MAC con WinBox, así que el router no necesita IP en esa red.
+# Se deshabilita en vez de borrarlo, igual que en los abonados: a ellos la CHR
+# se los volvía a crear al reiniciar (lo comprobamos el 24-nov).
+/ip dhcp-client set [find] disabled=yes
 
 # Una etiqueta en cada boca, para que el /export se explique solo
 /interface ethernet set [find default-name=ether1] comment="gestion: red solo-anfitrion, sin IP (WinBox por MAC)"

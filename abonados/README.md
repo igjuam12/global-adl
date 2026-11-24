@@ -130,7 +130,7 @@ Dos formas, dan el mismo resultado:
 ```
 /system identity set name=abonado1
 /system clock set time-zone-name=America/Argentina/Buenos_Aires time-zone-autodetect=no
-/ip dhcp-client remove [find]
+/ip dhcp-client set [find] disabled=yes
 /interface vlan add name=vlan-acceso interface=ether2 vlan-id=100
 /interface pppoe-client add name=wan-pppoe interface=vlan-acceso user=abonado1 password=clave1 add-default-route=yes disabled=no
 ```
@@ -154,14 +154,16 @@ Para abonado2 cambian `name=abonado2`, `user=abonado2` y `password=clave2`.
 | `time-zone-name=...` | Zona horaria acordada. Si las máquinas tienen zonas distintas, en Grafana los datos aparecen corridos 3 horas |
 | `time-zone-autodetect=no` | RouterOS 7 intenta adivinar la zona por internet; no hay internet, así que lo apagamos |
 
-**`/ip dhcp-client remove [find]`**
+**`/ip dhcp-client set [find] disabled=yes`**
 
 | Parte | Qué hace |
 |---|---|
 | `/ip dhcp-client` | Sección de clientes DHCP (piden una IP automática) |
-| `remove [find]` | Borra todos. `[find]` sin condiciones encuentra todos los de la lista |
+| `set [find] disabled=yes` | Deshabilita todos. `[find]` sin condiciones encuentra todos los de la lista |
 
 El CHR trae de fábrica un cliente DHCP. No lo usamos: a la gestión se entra por MAC.
+
+**Por qué deshabilitarlo y no borrarlo:** al principio lo borrábamos (`remove`), y después de reiniciar el abonado volvía a tener IP en la gestión: la CHR había creado el cliente DHCP de nuevo. Lo comprobamos el 24-nov. En abonado1, borrado y reinicio: volvió. Deshabilitado y reinicio: siguió deshabilitado y sin IP, y lo mismo en abonado2. En el router no volvió a aparecer, pero ahí también lo dejamos deshabilitado: así los tres equipos quedan iguales y no dependemos de eso. Importa porque ese cliente agrega una ruta por defecto por la gestión, y el abonado tiene que salir solo por el PPPoE.
 
 **`/interface vlan add name=vlan-acceso interface=ether2 vlan-id=100`**
 

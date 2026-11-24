@@ -1,4 +1,4 @@
-# 2026-11-19 21:33:29 by RouterOS 7.20.4
+# 2026-11-24 16:26:44 by RouterOS 7.20.4
 # system id = RuUMn0zX10P
 #
 /interface ethernet
@@ -32,6 +32,8 @@ add comment="solo la boca de gestion" interface=ether1 list=gestion
 add comment="servidor PPPoE de los abonados" default-profile=pppoe-base disabled=no interface=vlan-acceso service-name=isp
 /ip address
 add address=10.10.50.1/24 comment="router en la red de servicios" interface=ether3 network=10.10.50.0
+/ip dhcp-client
+add disabled=yes interface=ether1
 /ip firewall filter
 add action=drop chain=forward comment="los abonados no llegan a la red de servicios" dst-address=10.10.50.0/24 in-interface=all-ppp
 add action=drop chain=input comment="los abonados no llegan a la administracion del router" dst-port=21,22,23,80,443,8291,8728,8729 in-interface=all-ppp protocol=tcp

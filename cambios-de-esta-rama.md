@@ -78,13 +78,13 @@ La parte está armada entera. **Nico: revisala y apropiatela**, porque la tenés
 
 ### Parte 3 · Router (Nacho) — [`mikrotik/`](mikrotik/)
 
-Tres archivos, uno por etapa: `01-base-pppoe.rsc` (VLAN 100, pool, perfiles, servidor PPPoE, usuario `btest`, protección), `02-radius.rsc` (cliente RADIUS, accounting cada minuto, acepta corte y cambio de plan) y `03-monitoreo.rsc` (SNMP de solo lectura y syslog hacia `isp-monitoreo`). En `export/` está lo que quedó en el router real.
+Tres archivos, uno por etapa: `01-base-pppoe.rsc` (VLAN 100, pool, perfiles, servidor PPPoE, usuario `btest`, protección), `02-radius.rsc` (cliente RADIUS, accounting cada minuto, acepta corte y cambio de plan) y `03-monitoreo.rsc` (SNMP de solo lectura y syslog hacia `isp-monitoreo`). En `export/` está lo que quedó en el router real. El 24-nov, `01` pasó a deshabilitar el cliente DHCP de gestión en vez de borrarlo, igual que los abonados (ver la parte 4).
 
 ### Parte 4 · Abonados y pruebas (Rodri) — [`abonados/`](abonados/)
 
 | Qué | Dónde |
 | --- | --- |
-| `abonado1.rsc` y `abonado2.rsc` sin tocar | — |
+| Un solo cambio en la configuración de los abonados: el cliente DHCP de gestión se deshabilita en vez de borrarse. Borrado, la CHR lo volvía a crear al reiniciar y el abonado tomaba IP y ruta por defecto por la gestión (24-nov) | `abonado1.rsc`, `abonado2.rsc`, `README.md` sección 5 |
 | Tráfico automático cada 2 y 3 minutos, para que el tablero tenga movimiento. Usa el usuario `btest` del router (clave `BtestIsp2026`), así los abonados no guardan la clave de `admin` | `trafico.rsc` |
 | Cliente PPPoE `moroso`, apagado, en abonado1: se prende para mostrar el rechazo sin tocar la conexión normal | `moroso.rsc` |
 | Resultados de las pruebas de falla con el sistema completo | `pruebas.md` |
@@ -139,12 +139,18 @@ Son las que cambian lo que habíamos acordado. El detalle, con las alternativas 
 - Borrar las dos VMs y recrearlas desde el repo: unos 6 minutos.
 - Permisos: `grafana_ro` no puede leer las tablas, `radius` no puede borrar, y el administrador no entra por la red.
 
+**Probado el 24-nov:**
+
+- Reiniciar los tres MikroTik: siguen sin IP en la gestión y los abonados vuelven a entrar por RADIUS. Antes del arreglo del cliente DHCP, un abonado reiniciado tomaba IP por la gestión.
+- Los tres MikroTik comparados con los archivos del repo: coinciden.
+- FreeRADIUS arranca y autentica con `isp-monitoreo` apagada.
+- `isp-servicios` apagada entera, con el diseño de exportadores: Prometheus la marca caída en menos de un minuto y los abonados siguen conectados.
+- `isp cerrar-fantasmas` no cierra nada mientras el accounting no llega seguido, y acepta cuando vuelve.
+
 **No probado:**
 
 - Nada se repitió fuera de la PC de Nacho.
-- Que FreeRADIUS arranque con `isp-monitoreo` apagada. Debería: manda sus logs por UDP y no espera respuesta.
-- El panel "Equipos", visto en el navegador. La consulta responde y Grafana lo carga.
-- El apagado completo de `isp-servicios` con el diseño de exportadores (sí con el anterior).
+- El panel "Equipos", visto en el navegador. Su consulta da "Responde" y "No responde" según corresponde.
 - "Contraseña incorrecta" y "cambio de plan" con usuarios locales. Las dos se probaron con RADIUS.
 
 ---
@@ -155,6 +161,7 @@ Son las que cambian lo que habíamos acordado. El detalle, con las alternativas 
 - [ ] Notas: `notas/agustin.md` y `notas/igna.md` describen el diseño anterior; `notas/nico.md` está en blanco; `notas/nacho.md` tiene partes entre corchetes para completar.
 - [ ] Decidir en qué PC se presenta (sigue abierto en el plan).
 - [ ] Decidir entre todos si esto pasa a `main`, y qué se cambia antes.
+- [ ] Rodri: los `/export` de `abonados/export/` son de tu laboratorio del 19-nov y muestran el cliente DHCP todavía prendido. Si querés, sacalos de nuevo con el arreglo.
 
 Un detalle conocido: al prender `isp-servicios`, FreeRADIUS arranca una vez de más. Docker lo levanta antes de que la base acepte conexiones, falla y Docker lo vuelve a levantar un segundo después. Se cura solo.
 
@@ -178,3 +185,4 @@ git show <commit>          # el detalle de uno
 | Parte 5 (monitoreo): VM propia, Prometheus con exportadores y tablero | Igna |
 | Servidores: dos VMs Debian con Vagrant y comando de operación | Todos |
 | Documentación: arquitectura, topología, plan y esta guía | Todos |
+| Cliente DHCP de gestión deshabilitado en las MikroTik, y pruebas del 24-nov | Nacho y Rodri |

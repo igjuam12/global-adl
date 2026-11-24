@@ -56,7 +56,7 @@ En WinBox (se entra por MAC, usuario `admin`): menú **Files**, arrastrar el arc
 
 Tiene que contestar `Script file loaded and executed successfully`. Las etapas 2 y 3 se cargan igual, cuando el servidor ya esté arriba.
 
-**Ojo:** el archivo 01 borra el cliente DHCP de `ether1`. Si estabas conectado por IP, la sesión se corta; por MAC no pasa nada.
+**Ojo:** el archivo 01 deshabilita el cliente DHCP de `ether1`, y el router se queda sin IP en la gestión. Si estabas conectado por IP, la sesión se corta; por MAC no pasa nada. Se deshabilita en vez de borrarlo porque a los abonados la CHR se los volvía a crear al reiniciar ([`abonados/README.md`](../abonados/README.md), sección 5).
 
 ---
 

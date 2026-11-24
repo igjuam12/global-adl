@@ -17,8 +17,10 @@
 # Zona horaria acordada. autodetect=no porque no hay internet para adivinarla
 /system clock set time-zone-name=America/Argentina/Buenos_Aires time-zone-autodetect=no
 
-# Borra el cliente DHCP de fábrica. A la gestión se entra por MAC con WinBox
-/ip dhcp-client remove [find]
+# Apaga el cliente DHCP de fábrica: a la gestión se entra por MAC con WinBox.
+# Se deshabilita en vez de borrarlo: si se borra, la CHR lo vuelve a crear al
+# reiniciar y el abonado otra vez toma IP en la gestión (lo comprobamos el 24-nov).
+/ip dhcp-client set [find] disabled=yes
 
 # VLAN 100 sobre ether2: la misma etiqueta que usa el router
 /interface vlan add name=vlan-acceso interface=ether2 vlan-id=100
