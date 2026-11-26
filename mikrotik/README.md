@@ -67,6 +67,7 @@ Es lo mismo que la Práctica 6 de Redes, con los datos del proyecto.
 | Pieza | Para qué sirve | Valor |
 | --- | --- | --- |
 | Cliente NTP | Tomar la hora del servidor | 10.10.50.10 |
+| Servidor NTP | Darles la hora a los abonados, que no pueden llegar al servidor | Contesta en 100.64.1.1 |
 | VLAN `vlan-acceso` | El "pasillo" por donde llegan los abonados | VLAN 100 sobre `ether2` |
 | Pool `pool-abonados` | Las IPs que se reparten | 100.64.1.10 a 100.64.1.100 |
 | Perfil `pppoe-base` | De dónde sale la IP del abonado y cuál usa el router | Router 100.64.1.1, **sin velocidad** |

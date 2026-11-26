@@ -1,4 +1,4 @@
-# 2026-11-24 16:26:44 by RouterOS 7.20.4
+# 2026-11-24 17:17:52 by RouterOS 7.20.4
 # system id = RuUMn0zX10P
 #
 /interface ethernet
@@ -56,6 +56,8 @@ add action=recolector topics=warning
 add action=recolector topics=error
 add action=recolector topics=critical
 /system ntp client
+set enabled=yes
+/system ntp server
 set enabled=yes
 /system ntp client servers
 add address=10.10.50.10

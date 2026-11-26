@@ -130,6 +130,7 @@ Dos formas, dan el mismo resultado:
 ```
 /system identity set name=abonado1
 /system clock set time-zone-name=America/Argentina/Buenos_Aires time-zone-autodetect=no
+/system ntp client set enabled=yes servers=100.64.1.1
 /ip dhcp-client set [find] disabled=yes
 /interface vlan add name=vlan-acceso interface=ether2 vlan-id=100
 /interface pppoe-client add name=wan-pppoe interface=vlan-acceso user=abonado1 password=clave1 add-default-route=yes disabled=no
@@ -154,6 +155,16 @@ Para abonado2 cambian `name=abonado2`, `user=abonado2` y `password=clave2`.
 | `time-zone-name=...` | Zona horaria acordada. Si las máquinas tienen zonas distintas, en Grafana los datos aparecen corridos 3 horas |
 | `time-zone-autodetect=no` | RouterOS 7 intenta adivinar la zona por internet; no hay internet, así que lo apagamos |
 
+**`/system ntp client set enabled=yes servers=100.64.1.1`**
+
+| Parte | Qué hace |
+|---|---|
+| `/system ntp client` | El cliente de hora (NTP): le pregunta la hora a otro equipo y corrige el reloj |
+| `enabled=yes` | Lo prende. De fábrica está apagado |
+| `servers=100.64.1.1` | Le pregunta al router, la otra punta del PPPoE |
+
+La hora oficial del laboratorio está en isp-servicios, pero el abonado no puede llegar ahí: el router no deja pasar a los abonados a la red de servicios. Por eso el router, que ya está en hora, hace de reloj para ellos. Sin esto, el 24-nov encontramos a abonado1 con 20 minutos de adelanto. Se comprueba en WinBox, en System → NTP Client: Status tiene que decir `synchronized`.
+
 **`/ip dhcp-client set [find] disabled=yes`**
 
 | Parte | Qué hace |
@@ -163,7 +174,7 @@ Para abonado2 cambian `name=abonado2`, `user=abonado2` y `password=clave2`.
 
 El CHR trae de fábrica un cliente DHCP. No lo usamos: a la gestión se entra por MAC.
 
-**Por qué deshabilitarlo y no borrarlo:** al principio lo borrábamos (`remove`), y después de reiniciar el abonado volvía a tener IP en la gestión: la CHR había creado el cliente DHCP de nuevo. Lo comprobamos el 24-nov. En abonado1, borrado y reinicio: volvió. Deshabilitado y reinicio: siguió deshabilitado y sin IP, y lo mismo en abonado2. En el router no volvió a aparecer, pero ahí también lo dejamos deshabilitado: así los tres equipos quedan iguales y no dependemos de eso. Importa porque ese cliente agrega una ruta por defecto por la gestión, y el abonado tiene que salir solo por el PPPoE.
+**Por qué deshabilitarlo y no borrarlo:** al principio lo borrábamos (`remove`), y después de reiniciar el abonado volvía a tener IP en la gestión: la CHR había creado el cliente DHCP de nuevo. Lo comprobamos el 24-nov. En abonado1, borrado y reinicio: volvió. Deshabilitado y reinicio: siguió deshabilitado y sin IP, y lo mismo en abonado2. En el router no volvió a aparecer, pero ahí también lo dejamos deshabilitado: así los tres equipos quedan iguales y no dependemos de eso. Importa porque la gestión es solo para entrar con WinBox: con IP, el abonado queda conectado a la red de la notebook por fuera del ISP. Además, el cliente viene con "agregar ruta por defecto": en este laboratorio no la agregó, porque el DHCP de VirtualBox no da puerta de enlace, pero en otra red podría mandar el tráfico del abonado por la gestión en vez de por el PPPoE.
 
 **`/interface vlan add name=vlan-acceso interface=ether2 vlan-id=100`**
 

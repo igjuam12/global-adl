@@ -111,7 +111,7 @@ Lo que cruza de una VM a la otra son tres cosas:
 | Cómo llegan los logs | Syslog: el router los manda | Guardarlos en la base del RADIUS: mezcla cosas distintas |
 | Quién junta las métricas | Prometheus pregunta a exportadores (`snmp-exporter` para el router, `node-exporter` para cada servidor) | Que las junte Alloy y se las empuje a Prometheus (lo tuvimos así): anda, pero Prometheus queda como un simple depósito y no se ve el modelo que trae de fábrica. Telegraf: hay que armarle la salida hacia Prometheus |
 | Quién junta los logs | Alloy, que recibe syslog y escribe en Loki | Telegraf: hay que armarle la lectura del syslog de RouterOS. Promtail: Grafana lo reemplazó por Alloy |
-| La hora | NTP: las dos VMs Debian toman la hora de internet (chrony) e `isp-servicios` se la da al router | Que cada equipo confíe en su reloj: el router llegó a estar 46 minutos adelantado |
+| La hora | NTP: las dos VMs Debian toman la hora de internet (chrony) e `isp-servicios` se la da al router, que se la pasa a los abonados | Que cada equipo confíe en su reloj: el router llegó a estar 46 minutos adelantado |
 | Velocidades de los planes | 512k y 768k | 10M y 50M: la CHR sin licencia no pasa de 1 Mbps por interfaz, así que la cola nunca entraría en juego |
 
 ---

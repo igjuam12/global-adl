@@ -17,6 +17,11 @@
 # Zona horaria acordada. autodetect=no porque no hay internet para adivinarla
 /system clock set time-zone-name=America/Argentina/Buenos_Aires time-zone-autodetect=no
 
+# La hora se la pide al router por NTP. Sin esto el abonado confía en su propio
+# reloj, que se corre. Al servidor de hora no puede llegar: el router no deja
+# pasar a los abonados a la red de servicios.
+/system ntp client set enabled=yes servers=100.64.1.1
+
 # Apaga el cliente DHCP de fábrica: a la gestión se entra por MAC con WinBox.
 # Se deshabilita en vez de borrarlo: si se borra, la CHR lo vuelve a crear al
 # reiniciar y el abonado otra vez toma IP en la gestión (lo comprobamos el 24-nov).

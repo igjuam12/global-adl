@@ -31,6 +31,11 @@
 # Mientras el servidor no exista, simplemente no sincroniza.
 /system ntp client set enabled=yes servers=10.10.50.10
 
+# Y el router se la da a los abonados. Ellos no pueden pedírsela al servidor:
+# el firewall de abajo no los deja entrar a la red de servicios. El router
+# contesta en 100.64.1.1, la dirección que los abonados ya conocen.
+/system ntp server set enabled=yes
+
 # El CHR trae de fábrica un cliente DHCP en ether1. Lo apagamos: a la gestión
 # se entra por MAC con WinBox, así que el router no necesita IP en esa red.
 # Se deshabilita en vez de borrarlo, igual que en los abonados: a ellos la CHR

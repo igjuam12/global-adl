@@ -78,13 +78,14 @@ La parte está armada entera. **Nico: revisala y apropiatela**, porque la tenés
 
 ### Parte 3 · Router (Nacho) — [`mikrotik/`](mikrotik/)
 
-Tres archivos, uno por etapa: `01-base-pppoe.rsc` (VLAN 100, pool, perfiles, servidor PPPoE, usuario `btest`, protección), `02-radius.rsc` (cliente RADIUS, accounting cada minuto, acepta corte y cambio de plan) y `03-monitoreo.rsc` (SNMP de solo lectura y syslog hacia `isp-monitoreo`). En `export/` está lo que quedó en el router real. El 24-nov, `01` pasó a deshabilitar el cliente DHCP de gestión en vez de borrarlo, igual que los abonados (ver la parte 4).
+Tres archivos, uno por etapa: `01-base-pppoe.rsc` (VLAN 100, pool, perfiles, servidor PPPoE, usuario `btest`, protección), `02-radius.rsc` (cliente RADIUS, accounting cada minuto, acepta corte y cambio de plan) y `03-monitoreo.rsc` (SNMP de solo lectura y syslog hacia `isp-monitoreo`). En `export/` está lo que quedó en el router real. El 24-nov, `01` pasó a deshabilitar el cliente DHCP de gestión en vez de borrarlo, igual que los abonados (ver la parte 4). Además, el router les da la hora a los abonados (servidor NTP).
 
 ### Parte 4 · Abonados y pruebas (Rodri) — [`abonados/`](abonados/)
 
 | Qué | Dónde |
 | --- | --- |
-| Un solo cambio en la configuración de los abonados: el cliente DHCP de gestión se deshabilita en vez de borrarse. Borrado, la CHR lo volvía a crear al reiniciar y el abonado tomaba IP y ruta por defecto por la gestión (24-nov) | `abonado1.rsc`, `abonado2.rsc`, `README.md` sección 5 |
+| Un solo cambio en la configuración de los abonados: el cliente DHCP de gestión se deshabilita en vez de borrarse. Borrado, la CHR lo volvía a crear al reiniciar y el abonado tomaba IP en la gestión (24-nov) | `abonado1.rsc`, `abonado2.rsc`, `README.md` sección 5 |
+| Los abonados toman la hora del router por NTP. Antes no tenían de dónde, y abonado1 estaba 20 minutos adelantado (24-nov) | `abonado1.rsc`, `abonado2.rsc`, `README.md` sección 5 |
 | Tráfico automático cada 2 y 3 minutos, para que el tablero tenga movimiento. Usa el usuario `btest` del router (clave `BtestIsp2026`), así los abonados no guardan la clave de `admin` | `trafico.rsc` |
 | Cliente PPPoE `moroso`, apagado, en abonado1: se prende para mostrar el rechazo sin tocar la conexión normal | `moroso.rsc` |
 | Resultados de las pruebas de falla con el sistema completo | `pruebas.md` |

@@ -211,7 +211,7 @@ Un puerto es como el "número de departamento" dentro de una IP: indica a qué p
 | Métricas de isp-servicios (node-exporter) | 9100/tcp | Prometheus, desde isp-monitoreo, le pregunta a isp-servicios cómo está el servidor (CPU, memoria, disco). Se publica solo en 10.10.50.10 |
 | Syslog (logs del router) | 1514/udp | El router los manda a isp-monitoreo: 10.10.50.20:1514 (Alloy). Decidido en la parte 5 |
 | Syslog (logs de FreeRADIUS) | 1515/udp | Docker, desde isp-servicios, le manda a Alloy (10.10.50.20:1515) lo que escribe FreeRADIUS |
-| NTP (hora) | 123/udp | El router le pide la hora a isp-servicios (10.10.50.10) |
+| NTP (hora) | 123/udp | El router le pide la hora a isp-servicios (10.10.50.10), y los abonados al router (100.64.1.1) |
 | Alloy (diagnóstico) / Prometheus (diagnóstico) | 12345/tcp y 9090/tcp | En isp-monitoreo. Solo si se define `GESTION_IP` en `.env`; por defecto quedan en 127.0.0.1 de esa VM |
 
 ### Versiones
