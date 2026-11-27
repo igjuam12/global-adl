@@ -56,7 +56,7 @@ Las herramientas de la Parte 5 van cada una en su propia carpeta en la raíz. Lo
 ### Requisitos
 
 - **VirtualBox y Vagrant** en la PC. Lo probamos con VirtualBox 7.2.16 y Vagrant 2.4.9.
-- **3,25 GB de RAM** para tener las 5 VMs prendidas: 256 MB cada MikroTik, 1 GB isp-servicios y 1,5 GB isp-monitoreo.
+- **3,75 GB de RAM** para tener las 5 VMs prendidas: 256 MB cada MikroTik, 1 GB isp-servicios y 2 GB isp-monitoreo.
 - La imagen de **CHR 7.20.4** para las tres VMs MikroTik (ver [`abonados/README.md`](abonados/README.md), sección 4).
 
 ### 1. Los dos servidores
@@ -73,7 +73,7 @@ vagrant up
 | VM | IP | RAM | Qué corre | Su archivo de Compose |
 | --- | --- | --- | --- | --- |
 | `isp-servicios` | 10.10.50.10 | 1 GB | Lo que hace funcionar al ISP: PostgreSQL y FreeRADIUS. También le da la hora al router | [`docker-compose.yml`](docker-compose.yml) |
-| `isp-monitoreo` | 10.10.50.20 | 1,5 GB | Lo que lo mira: Prometheus con sus exportadores, Alloy, Loki y Grafana | [`docker-compose.monitoreo.yml`](docker-compose.monitoreo.yml) |
+| `isp-monitoreo` | 10.10.50.20 | 2 GB | Lo que lo mira: Prometheus con sus exportadores, Alloy, Loki y Grafana | [`docker-compose.monitoreo.yml`](docker-compose.monitoreo.yml) |
 
 **Por qué dos y no una:** para separar el monitoreo de lo monitoreado. Si se cae isp-servicios (la base y el RADIUS), el tablero sigue vivo en la otra VM y lo muestra. Con todo en una sola VM se caían juntos el RADIUS y el tablero.
 

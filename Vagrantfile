@@ -25,7 +25,7 @@ MAQUINAS = {
     claves: %w[POSTGRES_ADMIN_PASSWORD RADIUS_DB_PASSWORD GRAFANA_DB_PASSWORD RADIUS_SHARED_SECRET],
   },
   "isp-monitoreo" => {
-    ip: "10.10.50.20", memoria: 1536,
+    ip: "10.10.50.20", memoria: 2048,
     compose: "docker-compose.monitoreo.yml",
     carpetas: %w[alloy prometheus grafana servidor],
     claves: %w[GRAFANA_ADMIN_PASSWORD GRAFANA_DB_PASSWORD GESTION_IP],

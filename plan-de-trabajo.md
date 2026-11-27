@@ -135,9 +135,9 @@ Cada adaptador de VirtualBox se conecta a una red. Los nombres de las redes inte
 | abonado1 | Cliente, MikroTik | Gestión (solo-anfitrión) → `ether1` | `isp-acceso` → `ether2` | — | 256 MB |
 | abonado2 | Cliente, MikroTik | Gestión (solo-anfitrión) → `ether1` | `isp-acceso` → `ether2` | — | 256 MB |
 | isp-servicios | Debian 12 con Docker, creada con Vagrant. La base y el RADIUS | NAT → `eth0` | `isp-servicios` → `eth1` | — | 1 GB |
-| isp-monitoreo | Debian 12 con Docker, creada con Vagrant. El recolector y el tablero | NAT → `eth0` | `isp-servicios` → `eth1` | — | 1,5 GB |
+| isp-monitoreo | Debian 12 con Docker, creada con Vagrant. El recolector y el tablero | NAT → `eth0` | `isp-servicios` → `eth1` | — | 2 GB |
 
-- Son **3,25 GB** de RAM en total. Cada uno las arma en su PC (sección 9). Presentamos en la computadora con más RAM.
+- Son **3,75 GB** de RAM en total. Cada uno las arma en su PC (sección 9). Presentamos en la computadora con más RAM.
 - Todas las VMs MikroTik se **clonan de un CHR base limpio**. Al clonar, elegir **"generar nuevas direcciones MAC"**: dos abonados con la misma MAC dan problemas con PPPoE.
 - Docker va **adentro de las VMs Debian**, no con Docker Desktop en Windows. Así todas las VMs se ven en la misma red interna.
 - **isp-servicios e isp-monitoreo se crean con Vagrant:** `vagrant up` en la raíz del repo (ver el `README.md`). Crea las dos VMs, instala Docker y levanta los contenedores de cada una. Con esa box los adaptadores se llaman `eth0` (NAT) y `eth1` (la red interna: 10.10.50.10 en isp-servicios y 10.10.50.20 en isp-monitoreo).
@@ -454,7 +454,7 @@ Para que todos lleguemos al mismo resultado, seguimos la misma metodología:
 - **Las VMs se arman todas igual**, con los datos de las secciones 3, 4 y 6 (nombres de redes, IPs, adaptadores, versiones).
 - **Se siguen los mismos pasos, en el mismo orden** (tabla de abajo), juntando las piezas de a una conexión por vez, siguiendo el recorrido del abonado.
 - Cada paso se puede hacer recién cuando las partes que conecta ya están en el repo. Si te trabás en un paso, consultás a quien figura como referente.
-- Cada uno necesita **3,25 GB de RAM** para tener las 5 VMs prendidas.
+- Cada uno necesita **3,75 GB de RAM** para tener las 5 VMs prendidas.
 
 Cada uno "termina" su parte cuando:
 
@@ -539,7 +539,7 @@ Conviene elegir 3 o 4, hacerlos bien y tener una frase que justifique cada uno.
 
 > **Grafana ya no está en la misma VM que el RADIUS.** Al principio iban juntos, para ahorrar RAM y simplificar, y teníamos anotado el costo: si se caía esa VM, se caían el RADIUS y también el tablero que lo mostraría. El jue 19-nov lo separamos: el monitoreo (Alloy, Prometheus, Loki y Grafana) pasó a una VM propia, **isp-monitoreo**, como en un ISP real, donde el monitoreo va en otra máquina, separado de lo que vigila.
 >
-> - **Qué cuesta:** una VM más y medio GB más de RAM (de 2,75 a 3,25 GB en total).
+> - **Qué cuesta:** una VM más y un GB más de RAM (de 2,75 a 3,75 GB en total). Empezó con 1,5 GB; el 26-nov la subimos a 2 GB porque, después de 7 horas y media prendida, se quedó sin memoria y Grafana dejó de responder.
 > - **Qué cruza de una VM a la otra:** Grafana lee la base (5432/tcp) y los logs de FreeRADIUS van al recolector (1515/udp). Por eso la base ahora publica su puerto en la red de servicios, con una lista propia de quién entra y desde dónde (`postgres/pg_hba.conf`).
 > - **Qué no cambia:** las dos VMs están en la misma notebook. Si se apaga la notebook, se apaga todo.
 > - **Probado el 19-nov:** con isp-servicios apagada, el tablero siguió abierto. Los paneles del router y de los logs siguieron andando y "RADIUS sin respuesta" se puso en rojo; los que leen la base mostraron "No data". Al prenderla, todo se recuperó solo (`abonados/pruebas.md`, tabla 3).
